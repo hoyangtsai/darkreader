@@ -11,6 +11,7 @@ debug-thunderbird
 build-thunderbird.xpi
 darkreader.js
 debug.log
+build-safari
 
 # Node.js modules
 #-----------------------------------

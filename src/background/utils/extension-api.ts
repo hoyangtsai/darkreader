@@ -126,7 +126,7 @@ export async function getCommands() {
             return;
         }
         chrome.commands.getAll((commands) => {
-            if (commands) {
+            if (Array.isArray(commands)) {
                 resolve(commands);
             } else {
                 resolve([]);

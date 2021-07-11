@@ -16,7 +16,7 @@ import {DONATE_URL, GITHUB_URL, PRIVACY_URL, TWITTER_URL, getHelpURL} from '../.
 import {getLocalMessage} from '../../../utils/locales';
 import {compose} from '../../utils';
 import type {ExtensionData, ExtensionActions, TabInfo, News as NewsObject} from '../../../definitions';
-import {isMobile, isFirefox, isThunderbird} from '../../../utils/platform';
+import { isMobile, isFirefox, isThunderbird, isSafari} from '../../../utils/platform';
 
 interface BodyProps {
     data: ExtensionData;
@@ -33,7 +33,7 @@ interface BodyState {
 
 function openDevTools() {
     chrome.windows.create({
-        type: 'panel',
+        type: isSafari ? 'popup' : 'panel',
         url: isFirefox ? '../devtools/index.html' : 'ui/devtools/index.html',
         width: 600,
         height: 600,
