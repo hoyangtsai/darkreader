@@ -7,6 +7,7 @@ import SystemIcon from '../../main-page/system-icon';
 import WatchIcon from '../../main-page/watch-icon';
 import SiteToggle from '../site-toggle';
 import MoreToggleSettings from './more-toggle-settings';
+import {isSafari} from '../../../../utils/platform';
 
 function multiline(...lines: string[]) {
     return lines.join('\n');
@@ -50,7 +51,7 @@ function Header({data, actions, tab, onMoreToggleSettingsClick}: HeaderProps) {
                         {getLocalMessage('page_in_dark_list')}
                     </span>
                 ) : (
-                    <Shortcut
+                    !isSafari ? <Shortcut
                         commandName="addSite"
                         shortcuts={data.shortcuts}
                         textTemplate={(hotkey) => (hotkey
@@ -58,12 +59,12 @@ function Header({data, actions, tab, onMoreToggleSettingsClick}: HeaderProps) {
                             : getLocalMessage('setup_hotkey_toggle_site')
                         )}
                         onSetShortcut={(shortcut) => actions.setShortcut('addSite', shortcut)}
-                    />
+                    /> : null
                 )}
             </div>
             <div class="header__control header__app-toggle">
                 <Toggle checked={data.isEnabled} labelOn={getLocalMessage('on')} labelOff={getLocalMessage('off')} onChange={toggleExtension} />
-                <Shortcut
+                {!isSafari ? <Shortcut
                     commandName="toggle"
                     shortcuts={data.shortcuts}
                     textTemplate={(hotkey) => (hotkey
@@ -71,7 +72,7 @@ function Header({data, actions, tab, onMoreToggleSettingsClick}: HeaderProps) {
                         : getLocalMessage('setup_hotkey_toggle_extension')
                     )}
                     onSetShortcut={(shortcut) => actions.setShortcut('toggle', shortcut)}
-                />
+                /> : null}
                 <span
                     class="header__app-toggle__more-button"
                     onclick={onMoreToggleSettingsClick}

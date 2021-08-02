@@ -13,6 +13,7 @@ export const isWindows = platform.startsWith('win');
 export const isMacOS = platform.startsWith('mac');
 export const isMobile = userAgent.includes('mobile');
 export const isShadowDomSupported = typeof ShadowRoot === 'function';
+export const isiOS = isSafari && ('ontouchend' in document) && (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
 export const isMatchMediaChangeEventListenerSupported = (
     typeof MediaQueryList === 'function' &&
     typeof MediaQueryList.prototype.addEventListener === 'function'

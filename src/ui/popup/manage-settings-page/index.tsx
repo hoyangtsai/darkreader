@@ -8,6 +8,7 @@ import ExportTheme from './export-theme';
 import {isURLInList} from '../../../utils/url';
 import themeEngines from '../../../generators/theme-engines';
 import SyncConfigButton from './sync-config';
+import {isiOS} from '../../../utils/platform';
 
 export default function ManageSettingsPage(props: ViewProps) {
     const custom = props.data.settings.customThemes.find(
@@ -22,8 +23,8 @@ export default function ManageSettingsPage(props: ViewProps) {
             <SyncSettings {...props} />
             <SyncConfigButton {...props} />
             <ImportButton {...props} />
-            <ExportButton {...props} />
-            {engine === themeEngines.dynamicTheme ? <ExportTheme /> : null}
+            {isiOS ? null : <ExportButton {...props} />}
+            {(engine === themeEngines.dynamicTheme && !isiOS) ? <ExportTheme /> : null}
             <ResetButtonGroup {...props} />
         </section>
     );

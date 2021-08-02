@@ -4,7 +4,7 @@ import connect from '../connect';
 import Body from './components/body';
 import {popupHasBuiltInHorizontalBorders, popupHasBuiltInBorders, fixNotClosingPopupOnNavigation} from './utils/issues';
 import type {ExtensionData, ExtensionActions, TabInfo} from '../../definitions';
-import {isMobile, isFirefox} from '../../utils/platform';
+import {isMobile, isFirefox, isSafari, isiOS} from '../../utils/platform';
 
 function renderBody(data: ExtensionData, tab: TabInfo, actions: ExtensionActions) {
     if (data.settings.previewNewDesign) {
@@ -36,6 +36,8 @@ addEventListener('load', start);
 
 document.documentElement.classList.toggle('mobile', isMobile);
 document.documentElement.classList.toggle('firefox', isFirefox);
+document.documentElement.classList.toggle('safari', isSafari);
+document.documentElement.classList.toggle('ios', isiOS);
 document.documentElement.classList.toggle('built-in-borders', popupHasBuiltInBorders());
 document.documentElement.classList.toggle('built-in-horizontal-borders', popupHasBuiltInHorizontalBorders());
 

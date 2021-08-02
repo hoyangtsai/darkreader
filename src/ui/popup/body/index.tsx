@@ -11,7 +11,7 @@ import SiteListPage from '../site-list-page';
 import ThemePage from '../theme/page';
 import type {ViewProps} from '../types';
 import ManageSettingsPage from '../manage-settings-page';
-import {isMobile} from '../../../utils/platform';
+import {isMobile, isSafari} from '../../../utils/platform';
 
 function Logo() {
     return (
@@ -164,9 +164,9 @@ export default function Body(props: ViewProps) {
             <section class="m-section pages-section">
                 <Pages {...props} />
             </section>
-            <section class="m-section">
+            {!isSafari ? <section class="m-section">
                 <DonateGroup />
-            </section>
+            </section> : null}
             <AppVersion />
             <Overlay />
         </body>

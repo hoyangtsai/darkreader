@@ -16,10 +16,12 @@
     "icons": {
         "16": "icons/dr_16.png",
         "48": "icons/dr_48.png",
-        "128": "icons/dr_128.png"
+        "128": "icons/dr_128.png",
+        "256": "icons/dr_256.png",
+        "512": "icons/dr_512.png"
     },
     "background": {
-        "persistent": true,
+        "persistent": false,
         "page": "background/index.html"
     },
     "content_scripts": [

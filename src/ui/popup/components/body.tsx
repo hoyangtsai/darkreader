@@ -16,7 +16,7 @@ import {DONATE_URL, GITHUB_URL, PRIVACY_URL, TWITTER_URL, getHelpURL} from '../.
 import {getLocalMessage} from '../../../utils/locales';
 import {compose} from '../../utils';
 import type {ExtensionData, ExtensionActions, TabInfo, News as NewsObject} from '../../../definitions';
-import { isMobile, isFirefox, isThunderbird, isSafari} from '../../../utils/platform';
+import {isMobile, isFirefox, isThunderbird, isSafari, isiOS} from '../../../utils/platform';
 
 interface BodyProps {
     data: ExtensionData;
@@ -57,7 +57,7 @@ function Body(props: BodyProps) {
         );
     }
 
-    if (isMobile || props.data.settings.previewNewDesign) {
+    if (isMobile || props.data.settings.previewNewDesign || isiOS) {
         return <NewBody {...props} />;
     }
 
@@ -154,9 +154,9 @@ function Body(props: BodyProps) {
                     <a class="footer-links__link" href={getHelpURL()} target="_blank" rel="noopener noreferrer">{getLocalMessage('help')}</a>
                 </div>
                 <div class="footer-buttons">
-                    <a class="donate-link" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+                    { !isSafari ? <a class="donate-link" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
                         <span class="donate-link__text">{getLocalMessage('donate')}</span>
-                    </a>
+                    </a> : null }
                     <NewsButton active={state.newsOpen} count={displayedNewsCount} onClick={toggleNews} />
                     <Button
                         onclick={openDevTools}
