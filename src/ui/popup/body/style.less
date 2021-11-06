@@ -10,7 +10,7 @@
 
 .mobile,
 .preview,
-.ios {
+.safari {
     .m-section {
         width: 100%;
 
@@ -133,7 +133,7 @@
     }
 }
 
-.mobile {
+.mobile, .safari {
     .darkreader-version {
         position: relative;
     }
@@ -163,7 +163,7 @@
 
 .mobile,
 .preview,
-.ios {
+.safari {
     @import "../control-group/style.less";
     @import "../check-button/style.less";
     @import "../main-page/style.less";
@@ -188,6 +188,12 @@
     button,
     button * {
         font-family: Metropolis, Open Sans, Segoe UI, Helvetica Neue, Ubuntu, sans-serif;
+    }
+}
+
+.safari {
+    body {
+        height: initial;
     }
 }
 

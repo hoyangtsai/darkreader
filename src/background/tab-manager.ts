@@ -109,7 +109,9 @@ export default class TabManager {
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(new Blob([content]));
                 a.download = name;
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
             }
             if (type === 'request-export-css') {
                 const activeTab = await this.getActiveTab();

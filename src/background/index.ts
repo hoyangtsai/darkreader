@@ -1,12 +1,13 @@
 import {Extension} from './extension';
 import {getHelpURL, UNINSTALL_URL} from '../utils/links';
+import {isSafari} from '../utils/platform';
 
 // Initialize extension
 const extension = new Extension();
 extension.start();
 
 chrome.runtime.onInstalled.addListener(({reason}) => {
-    if (reason === 'install') {
+    if (reason === 'install' && !isSafari) {
         chrome.tabs.create({url: getHelpURL()});
     }
 });
