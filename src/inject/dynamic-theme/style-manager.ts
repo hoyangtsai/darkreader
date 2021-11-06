@@ -1,29 +1,23 @@
 import type {Theme} from '../../definitions';
 import {forEach} from '../../utils/array';
 import {getMatches} from '../../utils/text';
-import {getAbsoluteURL} from '../../utils/url';
-import {watchForNodePosition, removeNode, iterateShadowHosts} from '../utils/dom';
-import {logInfo, logWarn} from '../utils/log';
+import {getAbsoluteURL, isRelativeHrefOnAbsolutePath} from '../../utils/url';
+import {watchForNodePosition, removeNode, iterateShadowHosts, addReadyStateCompleteListener} from '../utils/dom';
+import {logInfo, logWarn} from '../../utils/log';
 import {replaceCSSRelativeURLsWithAbsolute, removeCSSComments, replaceCSSFontFace, getCSSURLValue, cssImportRegex, getCSSBaseBath} from './css-rules';
 import {bgFetch} from './network';
 import {createStyleSheetModifier} from './stylesheet-modifier';
 import {isShadowDomSupported, isSafari, isThunderbird, isChromium} from '../../utils/platform';
 
 declare global {
-    interface HTMLStyleElement {
-        sheet: CSSStyleSheet;
-    }
-    interface HTMLLinkElement {
-        sheet: CSSStyleSheet;
-    }
-    interface SVGStyleElement {
-        sheet: CSSStyleSheet;
-    }
     interface Document {
         adoptedStyleSheets: CSSStyleSheet[];
     }
     interface ShadowRoot {
         adoptedStyleSheets: CSSStyleSheet[];
+    }
+    interface CSSStyleSheet {
+        replaceSync(text: string): void;
     }
 }
 
@@ -53,7 +47,7 @@ export function shouldManageStyle(element: Node) {
             )
         ) &&
         !element.classList.contains('darkreader') &&
-        element.media !== 'print' &&
+        element.media.toLowerCase() !== 'print' &&
         !element.classList.contains('stylus')
     );
 }
@@ -88,7 +82,7 @@ export function cleanLoadingLinks() {
     rejectorsForLoadingLinks.clear();
 }
 
-export function manageStyle(element: StyleElement, {update, loadingStart, loadingEnd}): StyleManager {
+export function manageStyle(element: StyleElement, {update, loadingStart, loadingEnd}: {update: () => void; loadingStart: () => void; loadingEnd: () => void}): StyleManager {
     const prevStyles: HTMLStyleElement[] = [];
     let next: Element = element;
     while ((next = next.nextElementSibling) && next.matches('.darkreader')) {
@@ -114,14 +108,61 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
         return element instanceof HTMLStyleElement && element.textContent.trim().match(cssImportRegex);
     }
 
+    // It loops trough the cssRules and check for CSSImportRule and their `href`.
+    // If the `href` isn't local and doesn't start with the same-origin.
+    // We can be ensure that's a cross-origin import
+    // And should add a cors-sheet to this element.
+    function hasImports(cssRules: CSSRuleList, checkCrossOrigin: boolean) {
+        let result = false;
+        if (cssRules) {
+            let rule: CSSRule;
+            cssRulesLoop:
+            for (let i = 0, len = cssRules.length; i < len; i++) {
+                rule = cssRules[i];
+                if ((rule as CSSImportRule).href) {
+                    if (checkCrossOrigin) {
+                        if ((rule as CSSImportRule).href.startsWith('http') && !(rule as CSSImportRule).href.startsWith(location.origin)) {
+                            result = true;
+                            break cssRulesLoop;
+                        }
+                    } else {
+                        result = true;
+                        break cssRulesLoop;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
     function getRulesSync(): CSSRuleList {
         if (corsCopy) {
+            logInfo('[getRulesSync] Using cors-copy.');
             return corsCopy.sheet.cssRules;
         }
         if (containsCSSImport()) {
+            logInfo('[getRulesSync] CSSImport detected.');
             return null;
         }
-        return safeGetSheetRules();
+
+        const cssRules = safeGetSheetRules();
+        if (
+            element instanceof HTMLLinkElement &&
+            !isRelativeHrefOnAbsolutePath(element.href) &&
+            hasImports(cssRules, false)
+        ) {
+            logInfo('[getRulesSync] CSSImportRule detected on non-local href.');
+            return null;
+        }
+
+        if (hasImports(cssRules, true)) {
+            logInfo('[getRulesSync] Cross-Origin CSSImportRule detected.');
+            return null;
+        }
+
+        logInfo('[getRulesSync] Using cssRules.');
+        !cssRules && logWarn('[getRulesSync] cssRules is null, trying again.');
+        return cssRules;
     }
 
     function insertStyle() {
@@ -191,8 +232,12 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
                 }
             }
 
-            if (cssRules != null) {
-                return cssRules;
+            if (cssRules) {
+                if (isRelativeHrefOnAbsolutePath(element.href)) {
+                    return cssRules;
+                } else if (!hasImports(cssRules, false)) {
+                    return cssRules;
+                }
             }
 
             cssText = await loadText(element.href);
@@ -259,6 +304,24 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
 
         cancelAsyncOperations = false;
 
+        function removeCSSRulesFromSheet(sheet: CSSStyleSheet) {
+            // Check if we can use a fastpath by using sheet.replaceSync.
+            // Because replaceSync can throw DOMExceptions we have to use try-catch.
+            try {
+                if (sheet.replaceSync) {
+                    sheet.replaceSync('');
+                    return;
+                }
+            } catch (err) {
+                logWarn('Could not use fastpath for removing rules from stylesheet', err);
+            }
+            // If we hit this point, the replaceSync didn't work
+            // and we have to iterate over the CSSRules.
+            for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
+                sheet.deleteRule(i);
+            }
+        }
+
         function prepareOverridesSheet() {
             if (!syncStyle) {
                 createSyncStyle();
@@ -277,9 +340,8 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
             }
 
             const sheet = syncStyle.sheet;
-            for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
-                sheet.deleteRule(i);
-            }
+
+            removeCSSRulesFromSheet(sheet);
 
             if (syncStylePositionWatcher) {
                 syncStylePositionWatcher.run();
@@ -305,6 +367,12 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
                 isAsyncCancelled: () => cancelAsyncOperations,
             });
             isOverrideEmpty = syncStyle.sheet.cssRules.length === 0;
+            if (sheetModifier.shouldRebuildStyle()) {
+                // "update" function schedules rebuilding the style
+                // ideally to wait for link loading, because some sites put links any time,
+                // but it can be complicated, so waiting for document completion can do the trick
+                addReadyStateCompleteListener(() => update());
+            }
         }
 
         buildOverrides();
@@ -374,6 +442,7 @@ export function manageStyle(element: StyleElement, {update, loadingStart, loadin
             }
             rulesCheckFrameId = requestAnimationFrame(checkForUpdate);
         };
+
         checkForUpdate();
     }
 
@@ -487,15 +556,18 @@ async function linkLoading(link: HTMLLinkElement, loadingId: number) {
             link.removeEventListener('error', onError);
             rejectorsForLoadingLinks.delete(loadingId);
         };
+
         const onLoad = () => {
             cleanUp();
             logInfo(`Linkelement ${loadingId} has been loaded`);
             resolve();
         };
+
         const onError = () => {
             cleanUp();
             reject(`Linkelement ${loadingId} couldn't be loaded. ${link.href}`);
         };
+
         rejectorsForLoadingLinks.set(loadingId, () => {
             cleanUp();
             reject();
@@ -509,7 +581,9 @@ async function linkLoading(link: HTMLLinkElement, loadingId: number) {
 }
 
 function getCSSImportURL(importDeclaration: string) {
-    return getCSSURLValue(importDeclaration.substring(8).replace(/;$/, ''));
+    // substring(7) is used to remove `@import` from the string.
+    // And then use .trim() to remove the possible whitespaces.
+    return getCSSURLValue(importDeclaration.substring(7).trim().replace(/;$/, ''));
 }
 
 async function loadText(url: string) {

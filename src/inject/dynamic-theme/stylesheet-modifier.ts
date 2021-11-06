@@ -1,5 +1,5 @@
 import type {Theme} from '../../definitions';
-import {createAsyncTasksQueue} from '../utils/throttle';
+import {createAsyncTasksQueue} from '../../utils/throttle';
 import {iterateCSSRules, iterateCSSDeclarations} from './css-rules';
 import type {ModifiableCSSDeclaration, ModifiableCSSRule} from './modify-css';
 import {getModifiableCSSDeclaration} from './modify-css';
@@ -30,7 +30,6 @@ export function createStyleSheetModifier() {
     const rulesModCache = new Map<string, ModifiableCSSRule>();
     const varTypeChangeCleaners = new Set<() => void>();
     let prevFilterKey: string = null;
-
     interface ModifySheetOptions {
         sourceCSSRules: CSSRuleList;
         theme: Theme;
@@ -40,7 +39,13 @@ export function createStyleSheetModifier() {
         isAsyncCancelled: () => boolean;
     }
 
-    function modifySheet(options: ModifySheetOptions): void {
+    let hasNonLoadedLink = false;
+    let wasRebuilt = false;
+    function shouldRebuildStyle() {
+        return hasNonLoadedLink && !wasRebuilt;
+    }
+
+    function modifySheet(options: ModifySheetOptions) {
         const rules = options.sourceCSSRules;
         const {theme, ignoreImageAnalysis, force, prepareSheet, isAsyncCancelled} = options;
 
@@ -48,6 +53,10 @@ export function createStyleSheetModifier() {
         const notFoundCacheKeys = new Set(rulesModCache.keys());
         const themeKey = getThemeKey(theme);
         const themeChanged = (themeKey !== prevFilterKey);
+
+        if (hasNonLoadedLink) {
+            wasRebuilt = true;
+        }
 
         const modRules: ModifiableCSSRule[] = [];
         iterateCSSRules(rules, (rule) => {
@@ -85,6 +94,8 @@ export function createStyleSheetModifier() {
                 modRules.push(modRule);
             }
             rulesModCache.set(cssText, modRule);
+        }, () => {
+            hasNonLoadedLink = true;
         });
 
         notFoundCacheKeys.forEach((key) => {
@@ -101,7 +112,7 @@ export function createStyleSheetModifier() {
 
         interface ReadyGroup {
             isGroup: true;
-            rule: any;
+            rule: CSSRule;
             rules: Array<ReadyGroup | ReadyStyleRule>;
         }
 
@@ -126,6 +137,7 @@ export function createStyleSheetModifier() {
                 const {property, value, important, sourceValue} = dec;
                 return `${property}: ${value == null ? sourceValue : value}${important ? ' !important' : ''};`;
             };
+
             const ruleText = `${selector} { ${declarations.map(getDeclarationText).join(' ')} }`;
             target.insertRule(ruleText, index);
         }
@@ -301,5 +313,5 @@ export function createStyleSheetModifier() {
         buildStyleSheet();
     }
 
-    return {modifySheet};
+    return {modifySheet, shouldRebuildStyle};
 }

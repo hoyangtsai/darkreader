@@ -1,5 +1,5 @@
-import {logWarn} from './log';
-import {throttle} from './throttle';
+import {logWarn} from '../../utils/log';
+import {throttle} from '../../utils/throttle';
 import {forEach} from '../../utils/array';
 import {getDuration} from '../../utils/time';
 
@@ -144,19 +144,23 @@ export function watchForNodePosition<T extends Node>(
     const run = () => {
         observer.observe(parent, {childList: true});
     };
+
     const stop = () => {
         clearTimeout(timeoutId);
         observer.disconnect();
         restore.cancel();
     };
+
     const skip = () => {
         observer.takeRecords();
     };
+
     const updateParent = (parentNode: Node & ParentNode) => {
         parent = parentNode;
         stop();
         run();
     };
+
     run();
     return {run, stop, skip};
 }
@@ -198,14 +202,35 @@ export function removeDOMReadyListener(listener: () => void) {
     readyStateListeners.delete(listener);
 }
 
+// `interactive` can and will be fired when their are still stylesheets loading.
+// We use certain actions that can cause a forced layout change, which is bad.
+export function isReadyStateComplete() {
+    return document.readyState === 'complete';
+}
+
+const readyStateCompleteListeners = new Set<() => void>();
+
+export function addReadyStateCompleteListener(listener: () => void) {
+    readyStateCompleteListeners.add(listener);
+}
+
+export function cleanReadyStateCompleteListeners() {
+    readyStateCompleteListeners.clear();
+}
+
 if (!isDOMReady()) {
     const onReadyStateChange = () => {
         if (isDOMReady()) {
-            document.removeEventListener('readystatechange', onReadyStateChange);
             readyStateListeners.forEach((listener) => listener());
             readyStateListeners.clear();
+            if (isReadyStateComplete()) {
+                document.removeEventListener('readystatechange', onReadyStateChange);
+                readyStateCompleteListeners.forEach((listener) => listener());
+                readyStateCompleteListeners.clear();
+            }
         }
     };
+
     document.addEventListener('readystatechange', onReadyStateChange);
 }
 
@@ -247,13 +272,13 @@ function getElementsTreeOperations(mutations: MutationRecord[]): ElementsTreeOpe
             if (n instanceof Element) {
                 if (n.isConnected) {
                     moves.add(n);
+                    additions.delete(n);
                 } else {
                     deletions.add(n);
                 }
             }
         });
     });
-    moves.forEach((n) => additions.delete(n));
 
     const duplicateAdditions = [] as Element[];
     const duplicateDeletions = [] as Element[];
