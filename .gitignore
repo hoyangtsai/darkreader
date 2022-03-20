@@ -3,7 +3,8 @@
 build/
 darkreader.js
 debug.log
-build-safari
+build**
+debug**
 
 # Node.js modules
 #-----------------------------------
