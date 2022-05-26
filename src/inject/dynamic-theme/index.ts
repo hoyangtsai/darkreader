@@ -5,7 +5,7 @@ import type {StyleElement, StyleManager} from './style-manager';
 import {manageStyle, getManageableStyles, cleanLoadingLinks} from './style-manager';
 import {watchForStyleChanges, stopWatchingForStyleChanges} from './watch';
 import {forEach, push, toArray} from '../../utils/array';
-import {removeNode, watchForNodePosition, iterateShadowHosts, isDOMReady, removeDOMReadyListener, cleanReadyStateCompleteListeners, addDOMReadyListener} from '../utils/dom';
+import {removeNode, watchForNodePosition, iterateShadowHosts, isDOMReady, removeDOMReadyListener, cleanReadyStateCompleteListeners, addDOMReadyListener, setIsDOMReady} from '../utils/dom';
 import {logInfo, logWarn} from '../../utils/log';
 import {throttle} from '../../utils/throttle';
 import {clamp} from '../../utils/math';
@@ -22,6 +22,7 @@ import {parse} from '../../utils/color';
 import {parsedURLCache} from '../../utils/url';
 import {variablesStore} from './variables';
 
+declare const __TEST__: boolean;
 const INSTANCE_ID = generateUID();
 const styleManagers = new Map<StyleElement, StyleManager>();
 const adoptedStyleManagers = [] as AdoptedStyleSheetManager[];
@@ -133,7 +134,7 @@ function createStaticStyleOverrides() {
     document.head.insertBefore(rootVarsStyle, variableStyle.nextSibling);
 
     const proxyScript = createOrUpdateScript('darkreader--proxy');
-    proxyScript.append(`(${injectProxy})()`);
+    proxyScript.append(`(${injectProxy})(!${fixes && fixes.disableStyleSheetsProxy})`);
     document.head.insertBefore(proxyScript, rootVarsStyle.nextSibling);
     proxyScript.remove();
 }
@@ -192,7 +193,7 @@ function createDynamicStyleOverrides() {
         .filter((style) => !styleManagers.has(style))
         .map((style) => createManager(style));
     newManagers
-        .map((manager) => manager.details())
+        .map((manager) => manager.details({secondRound: false}))
         .filter((detail) => detail && detail.rules.length > 0)
         .forEach((detail) => {
             variablesStore.addRulesForMatching(detail.rules);
@@ -250,13 +251,16 @@ function createManager(element: StyleElement) {
     }
 
     function update() {
-        const details = manager.details();
+        const details = manager.details({secondRound: true});
         if (!details) {
             return;
         }
         variablesStore.addRulesForMatching(details.rules);
         variablesStore.matchVariablesAndDependants();
         manager.render(filter, ignoredImageAnalysisSelectors);
+        if (__TEST__) {
+            document.dispatchEvent(new CustomEvent('__darkreader__test__dynamicUpdateComplete'));
+        }
     }
 
     const manager = manageStyle(element, {update, loadingStart, loadingEnd});
@@ -321,7 +325,7 @@ function createThemeAndWatchForUpdates() {
         watchForUpdates();
     }
 
-    if (document.hidden) {
+    if (document.hidden && !filter.immediateModify) {
         watchForDocumentVisibility(runDynamicStyle);
     } else {
         runDynamicStyle();
@@ -331,13 +335,21 @@ function createThemeAndWatchForUpdates() {
 }
 
 function handleAdoptedStyleSheets(node: ShadowRoot | Document) {
-    if (Array.isArray(node.adoptedStyleSheets)) {
-        if (node.adoptedStyleSheets.length > 0) {
-            const newManger = createAdoptedStyleSheetOverride(node);
+    try {
+        if (Array.isArray(node.adoptedStyleSheets)) {
+            if (node.adoptedStyleSheets.length > 0) {
+                const newManger = createAdoptedStyleSheetOverride(node);
 
-            adoptedStyleManagers.push(newManger);
-            newManger.render(filter, ignoredImageAnalysisSelectors);
+                adoptedStyleManagers.push(newManger);
+                newManger.render(filter, ignoredImageAnalysisSelectors);
+            }
         }
+    } catch (err) {
+        // For future readers, Dark Reader typically does not use 'try/catch' in its code but,
+        // due to a problem in Firefox Nightly, this is an exception. Allowing this exception
+        // to occur causes no consequence.
+        // Ref: https://github.com/darkreader/darkreader/issues/8789#issuecomment-1114210080
+        logWarn('Error occured in handleAdoptedStyleSheets: ', err);
     }
 }
 
@@ -354,7 +366,7 @@ function watchForUpdates() {
         const newManagers = stylesToManage
             .map((style) => createManager(style));
         newManagers
-            .map((manager) => manager.details())
+            .map((manager) => manager.details({secondRound: false}))
             .filter((detail) => detail && detail.rules.length > 0)
             .forEach((detail) => {
                 variablesStore.addRulesForMatching(detail.rules);
@@ -371,7 +383,7 @@ function watchForUpdates() {
     watchForInlineStyles((element) => {
         overrideInlineStyle(element, filter, ignoredInlineSelectors, ignoredImageAnalysisSelectors);
         if (element === document.documentElement) {
-            const styleAttr = element.getAttribute('style');
+            const styleAttr = element.getAttribute('style') || '';
             if (styleAttr.includes('--')) {
                 variablesStore.matchVariablesAndDependants();
                 variablesStore.putRootVars(document.head.querySelector('.darkreader--root-vars'), filter);
@@ -426,6 +438,13 @@ export function createOrUpdateDynamicTheme(filterConfig: FilterConfig, dynamicTh
         ignoredImageAnalysisSelectors = [];
         ignoredInlineSelectors = [];
     }
+
+    if (filter.immediateModify) {
+        setIsDOMReady(() => {
+            return true;
+        });
+    }
+
     isIFrame = iframe;
     if (document.head) {
         if (isAnotherDarkReaderInstanceActive()) {

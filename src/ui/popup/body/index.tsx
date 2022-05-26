@@ -157,7 +157,7 @@ export default function Body(props: ViewProps) {
             </section>
             {!isSafari ? <section class="m-section">
                 <DonateGroup />
-            </section>
+            </section> : null}
             <NewsSection {...props} />
             <Overlay />
         </body>
