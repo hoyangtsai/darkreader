@@ -17,6 +17,13 @@ function renderBody(data: ExtensionData, fonts: string[], actions: ExtensionActi
         document.documentElement.classList.remove('preview');
     }
 
+    if (data.news && data.news.length > 0) {
+        const latest = data.news[0];
+        if (latest && !latest.displayed) {
+            actions.markNewsAsDisplayed([latest.id]);
+        }
+    }
+
     sync(document.body, (
         <Body data={data} actions={actions} fonts={fonts} />
     ));
@@ -24,7 +31,7 @@ function renderBody(data: ExtensionData, fonts: string[], actions: ExtensionActi
 
 async function start() {
     const connector = new Connector();
-    window.addEventListener('unload', () => connector.disconnect());
+    window.addEventListener('unload', () => connector.disconnect(), {passive: true});
 
     const [data, fonts] = await Promise.all([
         connector.getData(),
@@ -34,7 +41,7 @@ async function start() {
     connector.subscribeToChanges((data) => renderBody(data, fonts, connector));
 }
 
-addEventListener('load', start);
+addEventListener('load', start, {passive: true});
 
 document.documentElement.classList.toggle('mobile', isMobile);
 document.documentElement.classList.toggle('firefox', isFirefox);
@@ -48,8 +55,7 @@ if (isFirefox) {
 }
 
 declare const __DEBUG__: boolean;
-const DEBUG = __DEBUG__;
-if (DEBUG) {
+if (__DEBUG__) {
     chrome.runtime.onMessage.addListener(({type}) => {
         if (type === MessageType.BG_CSS_UPDATE) {
             document.querySelectorAll('link[rel="stylesheet"]').forEach((link: HTMLLinkElement) => {
@@ -58,7 +64,7 @@ if (DEBUG) {
                 const newLink = document.createElement('link');
                 newLink.rel = 'stylesheet';
                 newLink.href = url.replace(/\?.*$/, `?nocache=${Date.now()}`);
-                link.parentElement.insertBefore(newLink, link);
+                link.parentElement!.insertBefore(newLink, link);
                 link.remove();
             });
         }
@@ -67,29 +73,45 @@ if (DEBUG) {
             location.reload();
         }
     });
+}
 
+declare const __TEST__: boolean;
+if (__TEST__) {
     const socket = new WebSocket(`ws://localhost:8894`);
+    socket.onopen = async () => {
+        socket.send(JSON.stringify({
+            data: {
+                type: 'popup',
+                uuid: `ready-${document.location.pathname}`,
+            },
+            id: null,
+        }));
+    };
     socket.onmessage = (e) => {
-        const respond = (message: {type: string; id?: number; data?: any}) => socket.send(JSON.stringify(message));
+        const respond = (message: {id?: number; data?: any; error?: string}) => socket.send(JSON.stringify(message));
         try {
             const message: {type: string; id: number; data: string} = JSON.parse(e.data);
-            if (message.type === 'click') {
-                const selector = message.data;
-                const element: HTMLElement = document.querySelector(selector);
-                element.click();
-                respond({type: 'click-response', id: message.id});
-            } else if (message.type === 'exists') {
-                const selector = message.data;
-                const element = document.querySelector(selector);
-                respond({type: 'exists-response', id: message.id, data: element != null});
-            } else if (message.type === 'rect') {
-                const selector = message.data;
-                const element: HTMLElement = document.querySelector(selector);
+            const {type, id, data: selector} = message;
+            if (type === 'click') {
+                // The required element may not exist yet
+                const check = () => {
+                    const element: HTMLElement | null = document.querySelector(selector);
+                    if (element) {
+                        element.click();
+                        respond({id});
+                    } else {
+                        requestIdleCallback(check, {timeout: 500});
+                    }
+                };
+
+                check();
+            } else if (type === 'rect') {
+                const element: HTMLElement = document.querySelector(selector)!;
                 const rect = element.getBoundingClientRect();
-                respond({type: 'rect-response', id: message.id, data: {left: rect.left, top: rect.top, width: rect.width, height: rect.height}});
+                respond({id, data: {left: rect.left, top: rect.top, width: rect.width, height: rect.height}});
             }
         } catch (err) {
-            respond({type: 'error', data: String(err)});
+            respond({error: String(err)});
         }
     };
 }

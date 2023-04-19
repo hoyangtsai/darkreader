@@ -1,5 +1,6 @@
 import {isURLEnabled, isURLMatched, isPDF, isFullyQualifiedDomain, getURLHostOrProtocol, getAbsoluteURL} from '../../../src/utils/url';
 import type {UserSettings} from '../../../src/definitions';
+import {isIPV6} from '../../../src/utils/ipv6';
 
 it('URL is enabled', () => {
     // Not invert listed
@@ -132,6 +133,16 @@ it('URL is enabled', () => {
         {enableForPDF: true, siteList: ['https://www.google.com/very/good/hidden/folder/pdf#file.pdf'], siteListEnabled: [], applyToListedOnly: false} as UserSettings,
         {isProtected: false, isInDarkList: false},
     )).toBe(false);
+    expect(isURLEnabled(
+        'https://leetcode.com/problems/two-sum/',
+        {enableForPDF: false, siteList: ['leetcode.com/problems/'], siteListEnabled: [], applyToListedOnly: false} as UserSettings,
+        {isProtected: false, isInDarkList: false},
+    )).toBe(false);
+    expect(isURLEnabled(
+        'https://leetcode.com/problemset/all/',
+        {enableForPDF: false, siteList: ['leetcode.com/problems/'], siteListEnabled: [], applyToListedOnly: false} as UserSettings,
+        {isProtected: false, isInDarkList: false},
+    )).toBe(true);
 
     // Dark theme detection
     expect(isURLEnabled(
@@ -223,6 +234,24 @@ it('URL is enabled', () => {
         {isProtected: false, isInDarkList: true},
     )).toEqual(false);
 
+    // Default URL matches everything
+    expect(isURLMatched('http://example.com', '*')).toEqual(true);
+    expect(isURLMatched('https://example.com', '*')).toEqual(true);
+    expect(isURLMatched('file:///c/some_file.pdf', '*')).toEqual(true);
+    expect(isURLMatched('chrome://settings', '*')).toEqual(true);
+    expect(isURLMatched('chrome-extension://settings', '*')).toEqual(true);
+    expect(isURLMatched('edge://settings', '*')).toEqual(true);
+    expect(isURLMatched('brave://settings', '*')).toEqual(true);
+    expect(isURLMatched('kiwi://settings', '*')).toEqual(true);
+    expect(isURLMatched('about:blank', '*')).toEqual(true);
+    expect(isURLMatched('about:preferences', '*')).toEqual(true);
+    // TODO: fix isURLMatched and uncomment me
+    // expect(isURLMatched('[::1]', '*')).toEqual(true);
+    // expect(isURLMatched('[::1]:80', '*')).toEqual(true);
+    expect(isURLMatched('127.0.0.1', '*')).toEqual(true);
+    expect(isURLMatched('127.0.0.1:80', '*')).toEqual(true);
+    expect(isURLMatched('localhost', '*')).toEqual(true);
+
     // Some URLs can have unescaped [] in query
     expect(isURLMatched(
         'google.co.uk/order.php?bar=[foo]',
@@ -240,6 +269,10 @@ it('URL is enabled', () => {
         'google.co.uk/order.php?bar=[foo]',
         '[2001:4860:4860::8844]',
     )).toEqual(false);
+    expect(isIPV6('file:///C:/[/test.html')).toEqual(false);
+    expect(isIPV6('file:///C:/[/test.html]')).toEqual(false);
+    expect(isIPV6('[2001:4860:4860::8844]')).toEqual(true);
+    expect(isIPV6('cplusplus.com/reference/vector/vector/operator[]/')).toEqual(false);
 
     // Temporary Dark Sites list fix
     expect(isURLEnabled(

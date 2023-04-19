@@ -1,6 +1,6 @@
 import type {FilterConfig, Theme} from '../definitions';
 import type {RGBA, HSLA} from '../utils/color';
-import {parse, rgbToHSL, hslToRGB, rgbToString, rgbToHexString} from '../utils/color';
+import {parseToHSLWithCache, rgbToHSL, hslToRGB, rgbToString, rgbToHexString} from '../utils/color';
 import {scale} from '../utils/math';
 import {applyColorMatrix, createFilterMatrix} from './utils/matrix';
 
@@ -21,21 +21,9 @@ function getFgPole(theme: Theme) {
 }
 
 const colorModificationCache = new Map<ColorFunction, Map<string, string>>();
-const colorParseCache = new Map<string, HSLA>();
-
-function parseToHSLWithCache(color: string) {
-    if (colorParseCache.has(color)) {
-        return colorParseCache.get(color);
-    }
-    const rgb = parse(color);
-    const hsl = rgbToHSL(rgb);
-    colorParseCache.set(color, hsl);
-    return hsl;
-}
 
 export function clearColorModificationCache() {
     colorModificationCache.clear();
-    colorParseCache.clear();
 }
 
 const rgbCacheKeys: Array<keyof RGBA> = ['r', 'g', 'b', 'a'];
@@ -52,17 +40,17 @@ function getCacheId(rgb: RGBA, theme: Theme) {
     return resultId;
 }
 
-function modifyColorWithCache(rgb: RGBA, theme: Theme, modifyHSL: (hsl: HSLA, pole?: HSLA, anotherPole?: HSLA) => HSLA, poleColor?: string, anotherPoleColor?: string) {
+function modifyColorWithCache(rgb: RGBA, theme: Theme, modifyHSL: (hsl: HSLA, pole?: HSLA | null, anotherPole?: HSLA | null) => HSLA, poleColor?: string, anotherPoleColor?: string) {
     let fnCache: Map<string, string>;
     if (colorModificationCache.has(modifyHSL)) {
-        fnCache = colorModificationCache.get(modifyHSL);
+        fnCache = colorModificationCache.get(modifyHSL)!;
     } else {
         fnCache = new Map();
         colorModificationCache.set(modifyHSL, fnCache);
     }
     const id = getCacheId(rgb, theme);
     if (fnCache.has(id)) {
-        return fnCache.get(id);
+        return fnCache.get(id)!;
     }
 
     const hsl = rgbToHSL(rgb);

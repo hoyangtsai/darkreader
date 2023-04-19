@@ -10,11 +10,16 @@ debug**
 #-----------------------------------
 node_modules/
 
+# Test results
+#-----------------------------------
+test-results-*.json
+
 # Code coverage reports
 #-----------------------------------
 tests/coverage/
 tests/browser/coverage/
 tests/inject/coverage/
+coverage/
 
 # IDE and editor configs
 #-----------------------------------
@@ -30,3 +35,8 @@ tests/inject/coverage/
 # V8 Profiler logs
 #-----------------------------------
 isolate-*-v8.log
+
+# Deno
+#-----------------------------------
+deno.lock
+deno.json

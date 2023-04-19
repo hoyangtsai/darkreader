@@ -1,6 +1,8 @@
 import {validateSettings, validateTheme} from '../../../src/utils/validation';
 import {DEFAULT_SETTINGS, DEFAULT_THEME} from '../../../src/defaults';
 import type {Theme, UserSettings} from '../../../src/definitions';
+import {AutomationMode} from '../../../src/utils/automation';
+import {ThemeEngine} from '../../../src/generators/theme-engines';
 
 test('Settings Validation', () => {
     const defaultTheme = JSON.parse(JSON.stringify(DEFAULT_THEME));
@@ -36,14 +38,14 @@ test('Settings Validation', () => {
         lightSchemeTextColor: '#ffffff00',
         scrollbarColor: false,
         selectionColor: 'green',
-        styleSystemControls: null as boolean,
+        styleSystemControls: null as boolean | null,
         lightColorScheme: '',
         darkColorScheme: false,
         immediateModify: 1,
     };
     themeValidation = validateTheme(wonkyTheme as any);
     expect(themeValidation.errors.length).toBeGreaterThan(0);
-    expect(wonkyTheme).toEqual(DEFAULT_THEME);
+    expect(wonkyTheme as any).toEqual(DEFAULT_THEME);
 
     const defaultSet = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
     let validation = validateSettings(defaultSet);
@@ -52,7 +54,7 @@ test('Settings Validation', () => {
 
     const wonkySet = {
         enabled: '',
-        fetchNews: null as boolean,
+        fetchNews: null as boolean | null,
         theme: {
             mode: 'dark',
             brightness: 250,
@@ -70,7 +72,7 @@ test('Settings Validation', () => {
             lightSchemeTextColor: '#ffffff00',
             scrollbarColor: false,
             selectionColor: 'green',
-            styleSystemControls: null as boolean,
+            styleSystemControls: null as boolean | null,
             lightColorScheme: '',
             darkColorScheme: false,
             immediateModify: 1,
@@ -96,12 +98,15 @@ test('Settings Validation', () => {
         ],
         siteList: ['a.com', '', 'b.com'],
         siteListEnabled: {0: 'a.com', 1: 'b.com'},
-        applyToListedOnly: null as boolean,
+        applyToListedOnly: null as boolean | null,
         changeBrowserTheme: 1,
-        syncSettings: null as boolean,
+        syncSettings: null as boolean | null,
         syncSitesFixes: 0,
-        automation: 'off',
-        automationBehaviour: 'Default',
+        automation: {
+            enabled: false,
+            behavior: 'OnOff',
+            mode: '',
+        },
         time: {
             activation: '10:00PM',
             deactivation: '19:00',
@@ -111,14 +116,14 @@ test('Settings Validation', () => {
             longitude: '5.3',
         },
         previewNewDesign: '',
-        enableForPDF: null as boolean,
+        enableForPDF: null as boolean | null,
         enableForProtectedPages: 'ok',
         enableContextMenus: 'yes',
         detectDarkTheme: 'no',
     };
     validation = validateSettings(wonkySet as any);
     expect(validation.errors.length).toBeGreaterThan(0);
-    expect(wonkySet).toEqual({
+    expect(wonkySet as any).toEqual({
         ...DEFAULT_SETTINGS,
         siteList: ['a.com', 'b.com'],
         presets: [{id: 'p5', name: 'P5', urls: ['a.com'], theme: {brightness: 100}}],
@@ -154,7 +159,7 @@ test('Settings Validation', () => {
             useFont: true,
             fontFamily: 'Comic Sans',
             textStroke: 0.5,
-            engine: 'dynamicTheme',
+            engine: ThemeEngine.dynamicTheme,
             stylesheet: '.x { color: red; }',
             darkSchemeBackgroundColor: '#abcdef',
             darkSchemeTextColor: '#abc123',
@@ -179,8 +184,11 @@ test('Settings Validation', () => {
         changeBrowserTheme: true,
         syncSettings: false,
         syncSitesFixes: true,
-        automation: 'time',
-        automationBehaviour: 'Scheme',
+        automation: {
+            enabled: true,
+            mode: AutomationMode.LOCATION,
+            behavior: 'OnOff',
+        },
         time: {
             activation: '18:00',
             deactivation: '7:00',

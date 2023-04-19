@@ -1,18 +1,15 @@
 import {isPDF} from '../../utils/url';
 import {isFirefox, isEdge} from '../../utils/platform';
 
-declare const browser: {
-    commands: {
-        update({name, shortcut}: chrome.commands.Command): void;
-    };
-};
-
-export function canInjectScript(url: string) {
+export function canInjectScript(url: string | null | undefined) {
     if (isFirefox) {
         return (url
             && !url.startsWith('about:')
             && !url.startsWith('moz')
             && !url.startsWith('view-source:')
+            && !url.startsWith('resource:')
+            && !url.startsWith('chrome:')
+            && !url.startsWith('jar:')
             && !url.startsWith('https://addons.mozilla.org/')
             && !isPDF(url)
         );
@@ -37,8 +34,8 @@ export function canInjectScript(url: string) {
     );
 }
 
-export async function readSyncStorage<T extends {[key: string]: any}>(defaults: T): Promise<T> {
-    return new Promise<T>((resolve) => {
+export async function readSyncStorage<T extends {[key: string]: any}>(defaults: T): Promise<T | null> {
+    return new Promise<T | null>((resolve) => {
         chrome.storage.sync.get(null, (sync: any) => {
             if (chrome.runtime.lastError) {
                 console.error(chrome.runtime.lastError.message);
@@ -152,10 +149,4 @@ export async function getCommands() {
             }
         });
     });
-}
-
-export function setShortcut(command: string, shortcut: string) {
-    if (typeof browser !== 'undefined' && browser.commands && browser.commands.update) {
-        browser.commands.update({name: command, shortcut});
-    }
 }

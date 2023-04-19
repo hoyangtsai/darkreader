@@ -6,7 +6,10 @@ import {parseArray, formatArray} from '../utils/text';
 import {compareURLPatterns, isURLInList} from '../utils/url';
 import {createTextStyle} from './text-style';
 import type {FilterConfig, InversionFix} from '../definitions';
-import {compareChromeVersions, chromiumVersion, isChromium} from '../utils/platform';
+import {compareChromeVersions, chromiumVersion, isFirefox, firefoxVersion} from '../utils/platform';
+
+declare const __CHROMIUM_MV2__: boolean;
+declare const __CHROMIUM_MV3__: boolean;
 
 export enum FilterMode {
     light = 0,
@@ -21,27 +24,39 @@ export enum FilterMode {
  * Patch: https://chromium-review.googlesource.com/c/chromium/src/+/1979258
  */
 export function hasPatchForChromiumIssue501582() {
-    return Boolean(
-        isChromium &&
+    return __CHROMIUM_MV3__ || Boolean(
+        __CHROMIUM_MV2__ &&
         compareChromeVersions(chromiumVersion, '81.0.4035.0') >= 0
     );
 }
 
-export default function createCSSFilterStyleSheet(config: FilterConfig, url: string, frameURL: string, fixes: string, index: SitePropsIndex<InversionFix>) {
-    const filterValue = getCSSFilterValue(config);
-    const reverseFilterValue = 'invert(100%) hue-rotate(180deg)';
-    return cssFilterStyleSheetTemplate(filterValue, reverseFilterValue, config, url, frameURL, fixes, index);
+/**
+ * Since Firefox v102.0, they have changed to the new root behavior.
+ * This was already the case for Chromium v81.0.4035.0 and Firefox now
+ * switched over as well.
+ */
+export function hasFirefoxNewRootBehavior() {
+    return Boolean(
+        isFirefox &&
+        compareChromeVersions(firefoxVersion, '102.0') >= 0
+    );
 }
 
-export function cssFilterStyleSheetTemplate(filterValue: string, reverseFilterValue: string, config: FilterConfig, url: string, frameURL: string, fixes: string, index: SitePropsIndex<InversionFix>) {
-    const fix = getInversionFixesFor(frameURL || url, fixes, index);
+export default function createCSSFilterStyleSheet(config: FilterConfig, url: string, isTopFrame: boolean, fixes: string, index: SitePropsIndex<InversionFix>) {
+    const filterValue = getCSSFilterValue(config)!;
+    const reverseFilterValue = 'invert(100%) hue-rotate(180deg)';
+    return cssFilterStyleSheetTemplate(filterValue, reverseFilterValue, config, url, isTopFrame, fixes, index);
+}
+
+export function cssFilterStyleSheetTemplate(filterValue: string, reverseFilterValue: string, config: FilterConfig, url: string, isTopFrame: boolean, fixes: string, index: SitePropsIndex<InversionFix>) {
+    const fix = getInversionFixesFor(url, fixes, index);
 
     const lines: string[] = [];
 
     lines.push('@media screen {');
 
     // Add leading rule
-    if (filterValue && !frameURL) {
+    if (filterValue && isTopFrame) {
         lines.push('');
         lines.push('/* Leading rule */');
         lines.push(createLeadingRule(filterValue));
@@ -78,10 +93,11 @@ export function cssFilterStyleSheetTemplate(filterValue: string, reverseFilterVa
         lines.push('}');
     });
 
-    if (!frameURL) {
+    if (isTopFrame) {
         const light = [255, 255, 255];
         // If browser affected by Chromium Issue 501582, set dark background on html
-        const bgColor = !hasPatchForChromiumIssue501582() && config.mode === FilterMode.dark ?
+        // Or if browser is Firefox v102+
+        const bgColor = (!hasPatchForChromiumIssue501582() && !hasFirefoxNewRootBehavior()) && config.mode === FilterMode.dark ?
             applyColorMatrix(light, createFilterMatrix(config)).map(Math.round) :
             light;
         lines.push('');
@@ -239,7 +255,7 @@ export function formatInversionFixes(inversionFixes: InversionFix[]) {
 
     return formatSitesFixesConfig(fixes, {
         props: Object.values(inversionFixesCommands),
-        getPropCommandName: (prop) => Object.entries(inversionFixesCommands).find(([, p]) => p === prop)[0],
+        getPropCommandName: (prop) => Object.entries(inversionFixesCommands).find(([, p]) => p === prop)![0],
         formatPropValue: (prop, value) => {
             if (prop === 'css') {
                 return (value as string).trim().replace(/\n+/g, '\n');

@@ -4,19 +4,20 @@ import {withForms} from 'malevic/forms';
 import {withState, useState} from 'malevic/state';
 import {TabPanel, Button} from '../../controls';
 import FilterSettings from './filter-settings';
-import {Header, MoreToggleSettings} from './header';
+import {Header, MoreSiteSettings, MoreToggleSettings, MoreNewHighlight} from './header';
 import Loader from './loader';
 import NewBody from '../body';
 import MoreSettings from './more-settings';
 import {NewsGroup, NewsButton} from './news';
 import SiteListSettings from './site-list-settings';
-import ThemeEngines from '../../../generators/theme-engines';
 import {getDuration} from '../../../utils/time';
 import {DONATE_URL, GITHUB_URL, PRIVACY_URL, TWITTER_URL, getHelpURL} from '../../../utils/links';
 import {getLocalMessage} from '../../../utils/locales';
-import {compose} from '../../utils';
+import {compose, openExtensionPage} from '../../utils';
 import type {ExtensionData, ExtensionActions, News as NewsObject} from '../../../definitions';
-import {isMobile, isFirefox, isThunderbird, isSafari} from '../../../utils/platform';
+import {isMobile, isSafari} from '../../../utils/platform';
+
+declare const __THUNDERBIRD__: boolean;
 
 interface BodyProps {
     data: ExtensionData;
@@ -27,16 +28,13 @@ interface BodyState {
     activeTab: string;
     newsOpen: boolean;
     didNewsSlideIn: boolean;
+    moreSiteSettingsOpen: boolean;
     moreToggleSettingsOpen: boolean;
+    newToggleMenusHighlightHidden: boolean;
 }
 
-function openDevTools() {
-    chrome.windows.create({
-        type: 'panel',
-        url: isFirefox ? '../devtools/index.html' : 'ui/devtools/index.html',
-        width: 600,
-        height: 600,
-    });
+async function openDevTools() {
+    await openExtensionPage('devtools');
 }
 
 function Body(props: BodyProps & {fonts: string[]}) {
@@ -45,7 +43,9 @@ function Body(props: BodyProps & {fonts: string[]}) {
         activeTab: 'Filter',
         newsOpen: false,
         didNewsSlideIn: false,
+        moreSiteSettingsOpen: false,
         moreToggleSettingsOpen: false,
+        newToggleMenusHighlightHidden: false,
     });
 
     if (!props.data.isReady) {
@@ -94,16 +94,18 @@ function Body(props: BodyProps & {fonts: string[]}) {
         }
     }
 
-    const globalThemeEngine = props.data.settings.theme.engine;
-    const devtoolsData = props.data.devtools;
-    const hasCustomFixes = (
-        (globalThemeEngine === ThemeEngines.dynamicTheme && devtoolsData.hasCustomDynamicFixes) ||
-        ([ThemeEngines.cssFilter, ThemeEngines.svgFilter].includes(globalThemeEngine) && devtoolsData.hasCustomFilterFixes) ||
-        (globalThemeEngine === ThemeEngines.staticTheme && devtoolsData.hasCustomStaticFixes)
-    );
+    function toggleMoreSiteSettings() {
+        setState({moreSiteSettingsOpen: !state.moreSiteSettingsOpen, moreToggleSettingsOpen: false, newToggleMenusHighlightHidden: true});
+        if (props.data.uiHighlights.includes('new-toggle-menus')) {
+            props.actions.hideHighlights(['new-toggle-menus']);
+        }
+    }
 
     function toggleMoreToggleSettings() {
-        setState({moreToggleSettingsOpen: !state.moreToggleSettingsOpen});
+        setState({moreToggleSettingsOpen: !state.moreToggleSettingsOpen, moreSiteSettingsOpen: false, newToggleMenusHighlightHidden: true});
+        if (props.data.uiHighlights.includes('new-toggle-menus')) {
+            props.actions.hideHighlights(['new-toggle-menus']);
+        }
     }
 
     return (
@@ -113,18 +115,19 @@ function Body(props: BodyProps & {fonts: string[]}) {
             <Header
                 data={props.data}
                 actions={props.actions}
+                onMoreSiteSettingsClick={toggleMoreSiteSettings}
                 onMoreToggleSettingsClick={toggleMoreToggleSettings}
             />
 
             <TabPanel
                 activeTab={state.activeTab}
                 onSwitchTab={(tab) => setState({activeTab: tab})}
-                tabs={isThunderbird ? {
+                tabs={__THUNDERBIRD__ ? {
                     'Filter': (
                         <FilterSettings data={props.data} actions={props.actions} />
                     ),
                     'More': (
-                        <MoreSettings data={props.data} actions={props.actions} fonts={props.fonts}/>
+                        <MoreSettings data={props.data} actions={props.actions} fonts={props.fonts} />
                     ),
                 } : {
                     'Filter': (
@@ -134,7 +137,7 @@ function Body(props: BodyProps & {fonts: string[]}) {
                         <SiteListSettings data={props.data} actions={props.actions} isFocused={state.activeTab === 'Site list'} />
                     ),
                     'More': (
-                        <MoreSettings data={props.data} actions={props.actions} fonts={props.fonts}/>
+                        <MoreSettings data={props.data} actions={props.actions} fonts={props.fonts} />
                     ),
                 }}
                 tabLabels={{
@@ -156,13 +159,7 @@ function Body(props: BodyProps & {fonts: string[]}) {
                         <span class="donate-link__text">{getLocalMessage('donate')}</span>
                     </a>
                     <NewsButton active={state.newsOpen} count={displayedNewsCount} onClick={toggleNews} />
-                    <Button
-                        onclick={openDevTools}
-                        class={{
-                            'dev-tools-button': true,
-                            'dev-tools-button--has-custom-fixes': hasCustomFixes,
-                        }}
-                    >
+                    <Button onclick={openDevTools} class="dev-tools-button">
                         🛠 {getLocalMessage('open_dev_tools')}
                     </Button>
                 </div>
@@ -173,12 +170,21 @@ function Body(props: BodyProps & {fonts: string[]}) {
                 onNewsOpen={onNewsOpen}
                 onClose={toggleNews}
             />
+            <MoreSiteSettings
+                data={props.data}
+                actions={props.actions}
+                isExpanded={state.moreSiteSettingsOpen}
+                onClose={toggleMoreSiteSettings}
+            />
             <MoreToggleSettings
                 data={props.data}
                 actions={props.actions}
                 isExpanded={state.moreToggleSettingsOpen}
                 onClose={toggleMoreToggleSettings}
             />
+            {props.data.uiHighlights.includes('new-toggle-menus') && !state.newToggleMenusHighlightHidden
+                ? <MoreNewHighlight />
+                : null}
         </body>
     );
 }

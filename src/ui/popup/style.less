@@ -112,43 +112,11 @@ footer {
         line-height: @size-control-inner;
         transform: skewX(-10deg);
     }
-
-    &::after {
-        background-image: url(../assets/images/ladybug-32.svg);
-        background-size: contain;
-        content: "";
-        display: inline-block;
-        height: @size-control-inner / 2;
-        left: 0;
-        position: absolute;
-        top: -@size-border - @size-control-inner / 2;
-        width: @size-control-inner;
-    }
-
-    &:hover::after {
-        filter: drop-shadow(0 0 @size-border @color-heading);
-    }
 }
 
 .dev-tools-button {
     overflow: visible;
     position: relative;
-
-    &--has-custom-fixes {
-        &::after {
-            background-color: @color-heading;
-            border-radius: @size-text-small-height / 2;
-            color: @color-control-fore;
-            content: "!";
-            font-size: @size-text-small;
-            line-height: @size-text-small-height;
-            min-width: @size-text-small-height;
-            position: absolute;
-            right: -@size-text-small-height / 3;
-            top: -@size-text-small-height / 3;
-            z-index: 3;
-        }
-    }
 }
 
 .ext-disabled {

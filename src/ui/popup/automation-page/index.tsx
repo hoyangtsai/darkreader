@@ -1,11 +1,18 @@
 import {m} from 'malevic';
 import {getLocalMessage} from '../../../utils/locales';
 import {CheckBox, TimeRangePicker, TextBox, Button} from '../../controls';
-import type {ViewProps} from '../types';
 import DropDown from '../../controls/dropdown/index';
+import {MessageType} from '../../../utils/message';
+import type {Message} from '../../../definitions';
+import type {ViewProps} from '../types';
+import type {Automation} from 'definitions';
+import {AutomationMode} from '../../../utils/automation';
+import {isMatchMediaChangeEventListenerBuggy} from '../../../utils/platform';
+
+declare const __CHROMIUM_MV3__: boolean;
 
 export default function AutomationPage(props: ViewProps) {
-    const isSystemAutomation = props.data.settings.automation === 'system';
+    const isSystemAutomation = props.data.settings.automation.mode === AutomationMode.SYSTEM && props.data.settings.automation.enabled;
     const locationSettings = props.data.settings.location;
     const values = {
         'latitude': {
@@ -64,14 +71,22 @@ export default function AutomationPage(props: ViewProps) {
         });
     }
 
+    function changeAutomationMode(mode: Automation['mode']) {
+        props.actions.changeSettings({automation: {...props.data.settings.automation, ...{mode, enabled: Boolean(mode)}}});
+    }
+
+    function changeAutomationBehavior(behavior: Automation['behavior']) {
+        props.actions.changeSettings({automation: {...props.data.settings.automation, ...{behavior}}});
+    }
+
     return (
         <div
             class={'automation-page'}
         >
             <div class="automation-page__line">
                 <CheckBox
-                    checked={props.data.settings.automation === 'time'}
-                    onchange={(e: {target: {checked: boolean}}) => props.actions.changeSettings({automation: e.target.checked ? 'time' : ''})}
+                    checked={props.data.settings.automation.mode === AutomationMode.TIME}
+                    onchange={(e: {target: {checked: boolean}}) => changeAutomationMode(e.target.checked ? AutomationMode.TIME : AutomationMode.NONE)}
                 />
                 <TimeRangePicker
                     startTime={props.data.settings.time.activation}
@@ -84,14 +99,14 @@ export default function AutomationPage(props: ViewProps) {
             </p>
             <div class="automation-page__line automation-page__location">
                 <CheckBox
-                    checked={props.data.settings.automation === 'location'}
-                    onchange={(e: {target: {checked: boolean}}) => props.actions.changeSettings({automation: e.target.checked ? 'location' : ''})}
+                    checked={props.data.settings.automation.mode === AutomationMode.LOCATION}
+                    onchange={(e: {target: {checked: boolean}}) => changeAutomationMode(e.target.checked ? AutomationMode.LOCATION : AutomationMode.NONE)}
                 />
                 <TextBox
                     class="automation-page__location__latitude"
                     placeholder={getLocalMessage('latitude')}
                     onchange={(e: {target: HTMLInputElement}) => locationChanged(e.target, e.target.value, 'latitude')}
-                    oncreate={(node: HTMLInputElement) => node.value = getLocationString(locationSettings.latitude)}
+                    oncreate={(node: HTMLInputElement) => node.value = getLocationString(locationSettings.latitude!)}
                     onkeypress={(e) => {
                         if (e.key === 'Enter') {
                             (e.target as HTMLInputElement).blur();
@@ -102,7 +117,7 @@ export default function AutomationPage(props: ViewProps) {
                     class="automation-page__location__longitude"
                     placeholder={getLocalMessage('longitude')}
                     onchange={(e: {target: HTMLInputElement}) => locationChanged(e.target, e.target.value, 'longitude')}
-                    oncreate={(node: HTMLInputElement) => node.value = getLocationString(locationSettings.longitude)}
+                    oncreate={(node: HTMLInputElement) => node.value = getLocationString(locationSettings.longitude!)}
                     onkeypress={(e) => {
                         if (e.key === 'Enter') {
                             (e.target as HTMLInputElement).blur();
@@ -121,23 +136,34 @@ export default function AutomationPage(props: ViewProps) {
                 <CheckBox
                     class="automation-page__system-dark-mode__checkbox"
                     checked={isSystemAutomation}
-                    onchange={(e: {target: {checked: boolean}}) => props.actions.changeSettings({automation: e.target.checked ? 'system' : ''})}
-                />
+                    onchange={(e: {target: {checked: boolean}}) => changeAutomationMode(e.target.checked ? AutomationMode.SYSTEM : AutomationMode.NONE)}/>
                 <Button
                     class={{
                         'automation-page__system-dark-mode__button': true,
                         'automation-page__system-dark-mode__button--active': isSystemAutomation,
                     }}
-                    onclick={() => props.actions.changeSettings({automation: isSystemAutomation ? '' : 'system'})}
-                >{getLocalMessage('system_dark_mode')}
-                </Button>
+                    onclick={() => {
+                        if (__CHROMIUM_MV3__) {
+                            chrome.runtime.sendMessage<Message>({
+                                type: MessageType.UI_COLOR_SCHEME_CHANGE,
+                                data: {isDark: matchMedia('(prefers-color-scheme: dark)').matches}
+                            });
+                        }
+                        changeAutomationMode(isSystemAutomation ? AutomationMode.NONE : AutomationMode.SYSTEM);
+                    } }
+                >{getLocalMessage('system_dark_mode')}</Button>
             </div>
             <p class="automation-page__description">
                 {getLocalMessage('system_dark_mode_description')}
             </p>
+            {!isMatchMediaChangeEventListenerBuggy ? null :
+                <p class="automation-page__warning">
+                    {getLocalMessage('system_dark_mode_chromium_warning')}
+                </p>
+            }
             <DropDown
-                onChange={(selected: any) => props.actions.changeSettings({automationBehaviour: selected})}
-                selected={props.data.settings.automationBehaviour}
+                onChange={(selected: any) => changeAutomationBehavior(selected)}
+                selected={props.data.settings.automation.behavior}
                 options={[
                     {id: 'OnOff', content: 'Toggle on/off'},
                     {id: 'Scheme', content: 'Toggle dark/light'},

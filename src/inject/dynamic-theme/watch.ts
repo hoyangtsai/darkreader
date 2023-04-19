@@ -16,7 +16,7 @@ interface ChangedStyles {
 }
 
 const undefinedGroups = new Map<string, Set<Element>>();
-let elementsDefinitionCallback: (elements: Element[]) => void;
+let elementsDefinitionCallback: ((elements: Element[]) => void) | null;
 
 function collectUndefinedElements(root: ParentNode) {
     if (!isDefinedSelectorSupported) {
@@ -40,25 +40,25 @@ function collectUndefinedElements(root: ParentNode) {
                     if (elementsDefinitionCallback) {
                         const elements = undefinedGroups.get(tag);
                         undefinedGroups.delete(tag);
-                        elementsDefinitionCallback(Array.from(elements));
+                        elementsDefinitionCallback(Array.from(elements!));
                     }
                 });
             }
-            undefinedGroups.get(tag).add(el);
+            undefinedGroups.get(tag)!.add(el);
         });
 }
 
 let canOptimizeUsingProxy = false;
 document.addEventListener('__darkreader__inlineScriptsAllowed', () => {
     canOptimizeUsingProxy = true;
-});
+}, {once: true, passive: true});
 
 const resolvers = new Map<string, () => void>();
 
 function handleIsDefined(e: CustomEvent<{tag: string}>) {
     canOptimizeUsingProxy = true;
     if (resolvers.has(e.detail.tag)) {
-        const resolve = resolvers.get(e.detail.tag);
+        const resolve = resolvers.get(e.detail.tag)!;
         resolve();
     }
 }
@@ -107,8 +107,8 @@ export function watchForStyleChanges(currentStyles: StyleElement[], update: (sty
     const nextStyleSiblings = new WeakMap<Element, Element>();
 
     function saveStylePosition(style: StyleElement) {
-        prevStyleSiblings.set(style, style.previousElementSibling);
-        nextStyleSiblings.set(style, style.nextElementSibling);
+        prevStyleSiblings.set(style, style.previousElementSibling!);
+        nextStyleSiblings.set(style, style.nextElementSibling!);
     }
 
     function forgetStylePosition(style: StyleElement) {
@@ -219,7 +219,7 @@ export function watchForStyleChanges(currentStyles: StyleElement[], update: (sty
             onHugeMutations: handleHugeTreeMutations,
         });
         const attrObserver = new MutationObserver(handleAttributeMutations);
-        attrObserver.observe(root, {attributes: true, attributeFilter: ['rel', 'disabled', 'media'], subtree: true});
+        attrObserver.observe(root, {attributes: true, attributeFilter: ['rel', 'disabled', 'media', 'href'], subtree: true});
         observers.push(treeObserver, attrObserver);
         observedRoots.add(root);
     }
@@ -250,7 +250,7 @@ export function watchForStyleChanges(currentStyles: StyleElement[], update: (sty
             collectUndefinedElements(shadowRoot);
         });
     });
-    document.addEventListener('__darkreader__isDefined', handleIsDefined);
+    document.addEventListener('__darkreader__isDefined', handleIsDefined, {passive: true});
     collectUndefinedElements(document);
 }
 

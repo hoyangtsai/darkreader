@@ -1,7 +1,7 @@
 import {forEach} from '../../utils/array';
 import {isSafari} from '../../utils/platform';
 import {parseURL, getAbsoluteURL} from '../../utils/url';
-import {logInfo, logWarn} from '../../utils/log';
+import {logInfo, logWarn} from '../utils/log';
 
 export function iterateCSSRules(rules: CSSRuleList, iterate: (rule: CSSStyleRule) => void, onMediaRuleError?: () => void) {
     forEach(rules, (rule) => {
@@ -70,7 +70,7 @@ export function iterateCSSDeclarations(style: CSSStyleDeclaration, iterate: (pro
     if (cssText.includes('var(')) {
         if (isSafari) {
             // Safari doesn't show shorthand properties' values
-            shorthandVarDepPropRegexps.forEach(([prop, regexp]) => {
+            shorthandVarDepPropRegexps!.forEach(([prop, regexp]) => {
                 const match = cssText.match(regexp);
                 if (match && match[1]) {
                     const val = match[1].trim();
@@ -88,11 +88,15 @@ export function iterateCSSDeclarations(style: CSSStyleDeclaration, iterate: (pro
     }
 }
 
-export const cssURLRegex = /url\((('.+?')|(".+?")|([^\)]*?))\)/g;
+export const cssURLRegex = /url\((('.*?')|(".*?")|([^\)]*?))\)/g;
 export const cssImportRegex = /@import\s*(url\()?(('.+?')|(".+?")|([^\)]*?))\)? ?(screen)?;?/gi;
 
+// First try to extract the CSS URL value. Then do some post fixes, like unescaping
+// backslashes in the URL. (Chromium don't handle this natively). Remove all newlines
+// beforehand, otherwise `.` will fail matching the content within the url, as it
+// doesn't match any linebreaks.
 export function getCSSURLValue(cssURL: string) {
-    return cssURL.trim().replace(/^url\((.*)\)$/, '$1').trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+    return cssURL.trim().replace(/[\n\r\\]+/g, '').replace(/^url\((.*)\)$/, '$1').trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1').replace(/(?:\\(.))/g, '$1');
 }
 
 export function getCSSBaseBath(url: string) {
@@ -107,7 +111,7 @@ export function replaceCSSRelativeURLsWithAbsolute($css: string, cssBasePath: st
         // To prevent the whole operation from failing, let's just skip those
         // invalid URL's and let them be invalid.
         try {
-            return `url("${getAbsoluteURL(cssBasePath, pathValue)}")`;
+            return `url('${getAbsoluteURL(cssBasePath, pathValue)}')`;
         } catch (err) {
             logWarn('Not able to replace relative URL with Absolute URL, skipping');
             return match;

@@ -1,13 +1,13 @@
-import {parse, getSRGBLightness} from '../utils/color';
+import {getSRGBLightness, parseColorWithCache} from '../utils/color';
 
 function hasBuiltInDarkTheme() {
     const drStyles = document.querySelectorAll('.darkreader') as NodeListOf<HTMLStyleElement & {disabled: boolean}>;
     drStyles.forEach((style) => style.disabled = true);
 
-    const rootColor = parse(getComputedStyle(document.documentElement).backgroundColor);
-    const bodyColor = document.body ? parse(getComputedStyle(document.body).backgroundColor) : {r: 0, g: 0, b: 0, a: 0};
-    const rootLightness = (1 - rootColor.a) + rootColor.a * getSRGBLightness(rootColor.r, rootColor.g, rootColor.b);
-    const finalLightness = (1 - bodyColor.a) * rootLightness + bodyColor.a * getSRGBLightness(bodyColor.r, bodyColor.g, bodyColor.b);
+    const rootColor = parseColorWithCache(getComputedStyle(document.documentElement).backgroundColor)!;
+    const bodyColor = document.body ? parseColorWithCache(getComputedStyle(document.body).backgroundColor)! : {r: 0, g: 0, b: 0, a: 0};
+    const rootLightness = (1 - rootColor.a!) + rootColor.a! * getSRGBLightness(rootColor.r, rootColor.g, rootColor.b);
+    const finalLightness = (1 - bodyColor.a!) * rootLightness + bodyColor.a! * getSRGBLightness(bodyColor.r, bodyColor.g, bodyColor.b);
     const darkThemeDetected = finalLightness < 0.5;
 
     drStyles.forEach((style) => style.disabled = false);
@@ -31,8 +31,8 @@ function hasSomeStyle() {
     return false;
 }
 
-let observer: MutationObserver;
-let readyStateListener: () => void;
+let observer: MutationObserver | null;
+let readyStateListener: (() => void) | null;
 
 export function runDarkThemeDetector(callback: (hasDarkTheme: boolean) => void) {
     stopDarkThemeDetector();
@@ -56,6 +56,7 @@ export function runDarkThemeDetector(callback: (hasDarkTheme: boolean) => void) 
                 runCheck(callback);
             }
         };
+        // readystatechange event is not cancellable and does not bubble
         document.addEventListener('readystatechange', readyStateListener);
     }
 }

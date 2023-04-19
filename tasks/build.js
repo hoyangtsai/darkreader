@@ -1,92 +1,120 @@
 // @ts-check
-const bundleAPI = require('./bundle-api');
-const bundleCSS = require('./bundle-css');
-const bundleHTML = require('./bundle-html');
-const bundleJS = require('./bundle-js');
-const bundleLocales = require('./bundle-locales');
-const clean = require('./clean');
-const copy = require('./copy');
-const reload = require('./reload');
-const codeStyle = require('./code-style');
-const zip = require('./zip');
-const {runTasks} = require('./task');
-const {log} = require('./utils');
-const {fork} = require('child_process');
+import bundleAPI from './bundle-api.js';
+import bundleCSS from './bundle-css.js';
+import bundleJS from './bundle-js.js';
+import bundleLocales from './bundle-locales.js';
+import bundleManifest from './bundle-manifest.js';
+import bundleSignature from './bundle-signature.js';
+import clean from './clean.js';
+import copy from './copy.js';
+import saveLog from './log.js';
+import * as reload from './reload.js';
+import codeStyle from './code-style.js';
+import zip from './zip.js';
+import {runTasks} from './task.js';
+import {log} from './utils.js';
+import process from 'node:process';
+import paths from './paths.js';
+const {PLATFORM} = paths;
 
 const standardTask = [
     clean,
     bundleJS,
     bundleCSS,
-    bundleHTML,
     bundleLocales,
+    bundleManifest,
     copy,
+    saveLog,
 ];
 
 const buildTask = [
     ...standardTask,
     codeStyle,
-    zip
+    zip,
 ];
 
-async function build({debug, watch}) {
+const signedBuildTask = [
+    ...standardTask,
+    codeStyle,
+    bundleSignature,
+    zip,
+];
+
+async function build({platforms, debug, watch, log: logging, test, version}) {
     log.ok('BUILD');
     try {
-        await runTasks(debug ? standardTask : buildTask, {debug, watch});
+        await runTasks(debug ? standardTask : (version ? signedBuildTask : buildTask), {platforms, debug, watch, log: logging, test, version});
         if (watch) {
-            standardTask.forEach((task) => task.watch());
-            reload({type: reload.FULL});
+            standardTask.forEach((task) => task.watch(platforms));
+            reload.reload({type: reload.FULL});
             log.ok('Watching...');
         } else {
             log.ok('MISSION PASSED! RESPECT +');
         }
     } catch (err) {
+        console.log(err);
         log.error(`MISSION FAILED!`);
         process.exit(13);
     }
 }
 
-async function api() {
+async function api(debug, watch) {
     log.ok('API');
     try {
-        await runTasks([bundleAPI], {debug: false, watch: false});
+        const tasks = [bundleAPI];
+        if (!debug) {
+            tasks.push(codeStyle);
+        }
+        await runTasks(tasks, {platforms: {[PLATFORM.API]: true}, debug, watch, version: null, log: false, test: false});
+        if (watch) {
+            bundleAPI.watch();
+            log.ok('Watching...');
+        }
         log.ok('MISSION PASSED! RESPECT +');
     } catch (err) {
+        console.log(err);
         log.error(`MISSION FAILED!`);
         process.exit(13);
     }
 }
 
-async function executeChildProcess(args) {
-    if (process.env.BUILD_CHILD) {
-        throw new Error('Infinite loop');
+async function run({api: api_, release, debug, platforms, watch, log, test, version}) {
+    if (release && Object.values(platforms).some(Boolean)) {
+        await build({platforms, version, debug: false, watch: false, log: null, test: false});
     }
-    const env = {...process.env, BUILD_CHILD: '1'};
-    const child = fork(__filename, args, {env});
-    // Send SIGINTs as SIGKILLs, which are not ignored
-    process.on('SIGINT', () => {
-        child.kill('SIGKILL');
-        process.exit(130);
-    });
-    return new Promise((resolve, reject) => child.on('error', reject).on('close', resolve));
-}
-
-async function run() {
-    const args = process.argv.slice(2);
-
-    // Enable Ctrl+C to cancel the build immediately
-    if (!process.env.BUILD_CHILD) {
-        return executeChildProcess(args);
+    if (debug && Object.values(platforms).some(Boolean)) {
+        await build({platforms, version, debug, watch, log, test});
     }
-
-    if (args.includes('--release')) {
-        await build({debug: false, watch: false});
-    }
-    if (args.includes('--debug')) {
-        await build({debug: true, watch: args.includes('--watch')});
-    }
-    if (args.includes('--api')) {
-        await api();
+    if (api_) {
+        await api(debug, watch);
     }
 }
 
-run();
+function getParams(args) {
+    const allPlatforms = !(args.includes('--api') || args.includes('--chrome') || args.includes('--chrome-mv3') || args.includes('--firefox') || args.includes('--thunderbird'));
+    const platforms = {
+        [PLATFORM.CHROME]: allPlatforms || args.includes('--chrome'),
+        [PLATFORM.CHROME_MV3]: allPlatforms || args.includes('--chrome-mv3'),
+        [PLATFORM.FIREFOX]: allPlatforms || args.includes('--firefox'),
+        [PLATFORM.THUNDERBIRD]: allPlatforms || args.includes('--thunderbird'),
+    };
+
+    const versionArg = args.find((a) => a.startsWith('--version='));
+    const version = versionArg ? versionArg.substring('--version='.length) : null;
+
+    const release = args.includes('--release');
+    const debug = args.includes('--debug');
+    const watch = args.includes('--watch');
+    const logInfo = watch && args.includes('--log-info');
+    const logWarn = watch && args.includes('--log-warn');
+    const log = logWarn ? 'warn' : (logInfo ? 'info' : null);
+
+    const test = args.includes('--test');
+    const api = allPlatforms || args.includes('--api');
+
+    return {api, release, debug, platforms, watch, log, test, version};
+}
+
+const args = process.argv.slice(2);
+const params = getParams(args);
+run(params);

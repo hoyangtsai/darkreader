@@ -58,7 +58,7 @@ function mix(color1: number[], color2: number[], t: number) {
     return color1.map((c, i) => Math.round(c * (1 - t) + color2[i] * t));
 }
 
-export default function createStaticStylesheet(config: FilterConfig, url: string, frameURL: string, staticThemes: string, staticThemesIndex: SitePropsIndex<StaticTheme>) {
+export default function createStaticStylesheet(config: FilterConfig, url: string, isTopFrame: boolean, staticThemes: string, staticThemesIndex: SitePropsIndex<StaticTheme>) {
     const srcTheme = config.mode === 1 ? darkTheme : lightTheme;
     const theme = Object.entries(srcTheme).reduce((t, [prop, color]) => {
         const [r, g, b, a] = color;
@@ -70,18 +70,18 @@ export default function createStaticStylesheet(config: FilterConfig, url: string
     }, {} as ThemeColors);
 
     const commonTheme = getCommonTheme(staticThemes, staticThemesIndex);
-    const siteTheme = getThemeFor(frameURL || url, staticThemes, staticThemesIndex);
+    const siteTheme = getThemeFor(url, staticThemes, staticThemesIndex);
 
     const lines: string[] = [];
 
     if (!siteTheme || !siteTheme.noCommon) {
         lines.push('/* Common theme */');
-        lines.push(...ruleGenerators.map((gen) => gen(commonTheme, theme)));
+        lines.push(...ruleGenerators.map((gen) => gen(commonTheme, theme)!));
     }
 
     if (siteTheme) {
         lines.push(`/* Theme for ${siteTheme.url.join(' ')} */`);
-        lines.push(...ruleGenerators.map((gen) => gen(siteTheme, theme)));
+        lines.push(...ruleGenerators.map((gen) => gen(siteTheme, theme)!));
     }
 
     if (config.useFont || config.textStroke > 0) {
@@ -94,7 +94,7 @@ export default function createStaticStylesheet(config: FilterConfig, url: string
         .join('\n');
 }
 
-function createRuleGen(getSelectors: (siteTheme: StaticTheme) => string[], generateDeclarations: (theme: ThemeColors) => string[], modifySelector: ((s: string) => string) = (s) => s) {
+function createRuleGen(getSelectors: (siteTheme: StaticTheme) => string[] | undefined, generateDeclarations: (theme: ThemeColors) => string[], modifySelector: ((s: string) => string) = (s) => s) {
     return (siteTheme: StaticTheme, themeColors: ThemeColors) => {
         const selectors = getSelectors(siteTheme);
         if (selectors == null || selectors.length === 0) {

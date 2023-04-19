@@ -1,44 +1,77 @@
 // @ts-check
-const fs = require('fs');
-const yazl = require('yazl');
-const {getDestDir, PLATFORM} = require('./paths');
-const {createTask} = require('./task');
-const {getPaths} = require('./utils');
+import fs from 'node:fs';
+import {exec} from 'node:child_process';
+import yazl from 'yazl';
+import paths from './paths.js';
+import {createTask} from './task.js';
+import {getPaths} from './utils.js';
+const {getDestDir, PLATFORM} = paths;
 
-function archiveFiles({files, dest, cwd}) {
+/**
+ * @param {object} details
+ * @returns {Promise<void>}
+ */
+function archiveFiles({files, dest, cwd, date, mode}) {
     return new Promise((resolve) => {
         const archive = new yazl.ZipFile();
-        files.forEach((file) => archive.addFile(file, file.startsWith(`${cwd}/`) ? file.substring(cwd.length + 1) : file));
+        // Rproducible builds: sort filenames so files appear in the same order in zip
+        files.sort();
+        files.forEach((file) => archive.addFile(
+            file,
+            file.startsWith(`${cwd}/`) ? file.substring(cwd.length + 1) : file,
+            {mtime: date, mode}
+        ));
         /** @type {any} */
         const writeStream = fs.createWriteStream(dest);
-        archive.outputStream.pipe(writeStream).on('close', () => resolve());
+        archive.outputStream.pipe(writeStream).on('close', resolve);
         archive.end();
     });
 }
 
-async function archiveDirectory({dir, dest}) {
+async function archiveDirectory({dir, dest, date, mode}) {
     const files = await getPaths(`${dir}/**/*.*`);
-    await archiveFiles({files, dest, cwd: dir});
+    await archiveFiles({files, dest, cwd: dir, date, mode});
 }
 
-async function zip({debug}) {
-    const dir = getDestDir({debug, platform: PLATFORM.CHROME});
-    const firefoxDir = getDestDir({debug, platform: PLATFORM.FIREFOX});
-    const chromeMV3Dir = getDestDir({debug, platform: PLATFORM.CHROME_MV3});
-    const thunderBirdDir = getDestDir({debug, platform: PLATFORM.THUNDERBIRD});
+/**
+ * Reproducible builds: set file timestamp to last commit timestamp
+ * Returns the date of the last git commit to be used as archive file timestamp
+ * @returns {Promise<Date>} JavaScript Date object with date adjusted to counterbalance user's time zone
+ */
+async function getLastCommitTime() {
+    // We need to offset the user's time zone since yazl can not represent time zone in produced archive
+    return new Promise((resolve) =>
+        exec('git log -1 --format=%ct', (_, stdout) => resolve(new Date(
+            (Number(stdout) + (new Date()).getTimezoneOffset() * 60) * 1000
+        ))));
+}
 
+async function zip({platforms, debug, version}) {
+    if (debug) {
+        throw new Error('zip task does not support debug builds');
+    }
+    version = version ? `-${version}` : '';
     const releaseDir = 'build/release';
-    const chromeDest = `${releaseDir}/darkreader-chrome.zip`;
-    const chromeMV3Dest = `${releaseDir}/darkreader-chrome-mv3.zip`;
-    const firefoxDest = `${releaseDir}/darkreader-firefox.xpi`;
-    const thunderbirdDest = `${releaseDir}/darkreader-thunderbird.xpi`;
-    await archiveDirectory({dir, dest: chromeDest});
-    await archiveDirectory({dir: firefoxDir, dest: firefoxDest});
-    await archiveDirectory({dir: chromeMV3Dir, dest: chromeMV3Dest});
-    await archiveDirectory({dir: thunderBirdDir, dest: thunderbirdDest});
+    const promises = [];
+    const date = await getLastCommitTime();
+    const enabledPlatforms = Object.values(PLATFORM).filter((platform) => platform !== PLATFORM.API && platforms[platform]);
+    for (const platform of enabledPlatforms) {
+        const format = [PLATFORM.CHROME, PLATFORM.CHROME_MV3].includes(platform) ? 'zip' : 'xpi';
+        promises.push(archiveDirectory({
+            dir: getDestDir({debug, platform}),
+            dest: `${releaseDir}/darkreader-${platform}${version}.${format}`,
+            date,
+            // Reproducible builds: set permission flags on file like chmod 644 or -rw-r--r--
+            // This is needed because the built file might have different flags on different systems
+            mode: 0o644,
+        }));
+    }
+    await Promise.all(promises);
 }
 
-module.exports = createTask(
+const zipTask = createTask(
     'zip',
     zip,
 );
+
+export default zipTask;

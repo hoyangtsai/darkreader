@@ -2,20 +2,21 @@ import {createOrUpdateStyle, removeStyle} from './style';
 import {createOrUpdateSVGFilter, removeSVGFilter} from './svg-filter';
 import {runDarkThemeDetector, stopDarkThemeDetector} from './detector';
 import {createOrUpdateDynamicTheme, removeDynamicTheme, cleanDynamicThemeCache} from './dynamic-theme';
-import {logInfo, logWarn, logInfoCollapsed} from '../utils/log';
-import {watchForColorSchemeChange} from './utils/watch-color-scheme';
+import {logWarn, logInfoCollapsed} from './utils/log';
+import {isSystemDarkModeEnabled, runColorSchemeChangeDetector, stopColorSchemeChangeDetector} from '../utils/media-query';
 import {collectCSS} from './dynamic-theme/css-collection';
-import type {Message} from '../definitions';
+import type {DynamicThemeFix, Message, Theme} from '../definitions';
 import {MessageType} from '../utils/message';
-import {isThunderbird} from '../utils/platform';
+
+declare const __TEST__: boolean;
 
 let unloaded = false;
 
-// TODO: Use background page color scheme watcher when browser bugs fixed.
-let colorSchemeWatcher = watchForColorSchemeChange(({isDark}) => {
-    logInfo('Media query was changed');
-    sendMessage({type: MessageType.CS_COLOR_SCHEME_CHANGE, data: {isDark}});
-});
+let darkReaderDynamicThemeStateForTesting: 'loading' | 'ready' = 'loading';
+
+declare const __CHROMIUM_MV3__: boolean;
+declare const __THUNDERBIRD__: boolean;
+declare const __FIREFOX__: boolean;
 
 function cleanup() {
     unloaded = true;
@@ -24,34 +25,51 @@ function cleanup() {
     removeEventListener('resume', onResume);
     cleanDynamicThemeCache();
     stopDarkThemeDetector();
-    if (colorSchemeWatcher) {
-        colorSchemeWatcher.disconnect();
-        colorSchemeWatcher = null;
-    }
+    stopColorSchemeChangeDetector();
+}
+
+function sendMessageForTesting(uuid: string) {
+    document.dispatchEvent(new CustomEvent('test-message', {detail: uuid}));
 }
 
 function sendMessage(message: Message) {
     if (unloaded) {
         return;
     }
+    const responseHandler = (response: Message | 'unsupportedSender' | undefined) => {
+        // Vivaldi bug workaround. See TabManager for details.
+        if (response === 'unsupportedSender') {
+            removeStyle();
+            removeSVGFilter();
+            removeDynamicTheme();
+            cleanup();
+        }
+    };
+
     try {
-        chrome.runtime.sendMessage<Message>(message, (response) => {
-            // Vivaldi bug workaround. See TabManager for details.
-            if (response === 'unsupportedSender') {
-                removeStyle();
-                removeSVGFilter();
-                removeDynamicTheme();
-                cleanup();
-            }
-        });
-    } catch (e) {
+        if (__CHROMIUM_MV3__) {
+            const promise = chrome.runtime.sendMessage<Message, Message | 'unsupportedSender'>(message);
+            promise.then(responseHandler).catch(cleanup);
+        } else {
+            chrome.runtime.sendMessage<Message, 'unsupportedSender' | undefined>(message, responseHandler);
+        }
+    } catch (error) {
         /*
-         * Background can be unreachable if:
+         * We get here if Background context is unreachable which occurs when:
          *  - extension was disabled
          *  - extension was uninstalled
          *  - extension was updated and this is the old instance of content script
+         *
+         * Any async operations can be ignored here, but sync ones should run to completion.
+         *
+         * Regular message passing errors are returned via rejected promise or runtime.lastError.
          */
-        cleanup();
+        if (error.message === 'Extension context invalidated.') {
+            console.log('Dark Reader: instance of old CS detected, clening up.');
+            cleanup();
+        } else {
+            console.log('Dark Reader: unexpected error during message passing.');
+        }
     }
 }
 
@@ -90,7 +108,7 @@ function onMessage({type, data}: Message) {
             break;
         }
         case MessageType.BG_ADD_DYNAMIC_THEME: {
-            const {theme, fixes, isIFrame, detectDarkTheme} = data;
+            const {theme, fixes, isIFrame, detectDarkTheme} = data as {theme: Theme; fixes: DynamicThemeFix[]; isIFrame: boolean; detectDarkTheme: boolean};
             removeStyle();
             createOrUpdateDynamicTheme(theme, fixes, isIFrame);
             if (detectDarkTheme) {
@@ -101,29 +119,38 @@ function onMessage({type, data}: Message) {
                     }
                 });
             }
+            if (__TEST__) {
+                darkReaderDynamicThemeStateForTesting = 'ready';
+                sendMessageForTesting('darkreader-dynamic-theme-ready');
+                sendMessageForTesting(`darkreader-dynamic-theme-ready-${document.location.pathname}`);
+            }
             break;
         }
-        case MessageType.BG_EXPORT_CSS: {
+        case MessageType.BG_EXPORT_CSS:
             collectCSS().then((collectedCSS) => sendMessage({type: MessageType.CS_EXPORT_CSS_RESPONSE, data: collectedCSS}));
             break;
-        }
         case MessageType.BG_UNSUPPORTED_SENDER:
-        case MessageType.BG_CLEAN_UP: {
+        case MessageType.BG_CLEAN_UP:
             removeStyle();
             removeSVGFilter();
             removeDynamicTheme();
             stopDarkThemeDetector();
             break;
-        }
         case MessageType.BG_RELOAD:
             logWarn('Cleaning up before update');
             cleanup();
             break;
+        default:
+            break;
     }
 }
 
+runColorSchemeChangeDetector((isDark) =>
+    sendMessage({type: MessageType.CS_COLOR_SCHEME_CHANGE, data: {isDark}})
+);
+
 chrome.runtime.onMessage.addListener(onMessage);
-sendMessage({type: MessageType.CS_FRAME_CONNECT});
+sendMessage({type: MessageType.CS_FRAME_CONNECT, data: {isDark: isSystemDarkModeEnabled()}});
 
 function onPageHide(e: PageTransitionEvent) {
     if (e.persisted === false) {
@@ -136,17 +163,131 @@ function onFreeze() {
 }
 
 function onResume() {
-    sendMessage({type: MessageType.CS_FRAME_RESUME});
+    sendMessage({type: MessageType.CS_FRAME_RESUME, data: {isDark: isSystemDarkModeEnabled()}});
 }
 
 function onDarkThemeDetected() {
     sendMessage({type: MessageType.CS_DARK_THEME_DETECTED});
 }
 
-// Thunderbird don't has "tabs", and emails aren't 'frozen' or 'cached'.
+// Thunderbird does not have "tabs", and emails aren't 'frozen' or 'cached'.
 // And will currently error: `Promise rejected after context unloaded: Actor 'Conduits' destroyed before query 'RuntimeMessage' was resolved`
-if (!isThunderbird) {
-    addEventListener('pagehide', onPageHide);
-    addEventListener('freeze', onFreeze);
-    addEventListener('resume', onResume);
+if (!__THUNDERBIRD__) {
+    addEventListener('pagehide', onPageHide, {passive: true});
+    addEventListener('freeze', onFreeze, {passive: true});
+    addEventListener('resume', onResume, {passive: true});
+}
+
+if (__TEST__) {
+    async function awaitDOMContentLoaded() {
+        if (document.readyState === 'loading') {
+            return new Promise<void>((resolve) => {
+                addEventListener('DOMContentLoaded', () => resolve(), {passive: true});
+            });
+        }
+    }
+
+    async function awaitDarkReaderReady() {
+        if (darkReaderDynamicThemeStateForTesting !== 'ready') {
+            return new Promise<void>((resolve) => {
+                document.addEventListener('test-message', (event: CustomEvent) => {
+                    const message = event.detail;
+                    if (message === 'darkreader-dynamic-theme-ready' && darkReaderDynamicThemeStateForTesting === 'ready') {
+                        resolve();
+                    }
+                }, {passive: true});
+            });
+        }
+    }
+
+    const socket = new WebSocket(`ws://localhost:8894`);
+    socket.onopen = async () => {
+        document.addEventListener('test-message', (e: CustomEvent) => {
+            socket.send(JSON.stringify({
+                data: {
+                    type: 'page',
+                    uuid: e.detail,
+                },
+                id: null,
+            }));
+        }, {passive: true});
+
+        // Wait for DOM to be complete
+        // Note that here we wait only for DOM parsing and not for subresource load
+        await awaitDOMContentLoaded();
+        await awaitDarkReaderReady();
+        socket.send(JSON.stringify({
+            data: {
+                type: 'page',
+                message: 'page-ready',
+                uuid: `ready-${document.location.pathname}`,
+            },
+            id: null,
+        }));
+    };
+
+    // TODO(anton): remove this once Firefox supports tab.eval() via WebDriver BiDi
+    if (__FIREFOX__) {
+        function expectPageStyles(data: any) {
+            const errors = [];
+            const expectations = Array.isArray(data[0]) ? data : [data];
+            for (let i = 0; i < expectations.length; i++) {
+                const [selector, cssAttributeName, expectedValue] = expectations[i];
+                const selector_ = Array.isArray(selector) ? selector : [selector];
+                let element: Element = document as unknown as Element;
+                for (const part of selector_) {
+                    if (element instanceof HTMLIFrameElement) {
+                        element = (element as any).contentDocument;
+                    }
+                    if (element.shadowRoot instanceof ShadowRoot) {
+                        element = element.shadowRoot as unknown as Element;
+                    }
+                    if (part === 'document') {
+                        element = (element as any).documentElement;
+                    } else {
+                        element = element.querySelector(part);
+                    }
+                }
+                const style = getComputedStyle(element);
+                const realValue = style[cssAttributeName];
+                if (realValue !== expectedValue) {
+                    errors.push(i);
+                }
+            }
+            return errors;
+        }
+
+        socket.onmessage = (e) => {
+            function respond(data: any) {
+                socket.send(JSON.stringify({id, data}));
+            }
+
+            const {id, data, type} = JSON.parse(e.data);
+            switch (type) {
+                case 'firefox-eval': {
+                    const result = eval(data);
+                    if (result instanceof Promise) {
+                        result.then(respond);
+                    } else {
+                        respond(result);
+                    }
+                    break;
+                }
+                case 'firefox-expectPageStyles': {
+                    // Styles may not have been applied to the document yet,
+                    // so we check once immediatelly and then on an interval.
+                    function checkPageStylesNow() {
+                        const errors = expectPageStyles(data);
+                        if (errors.length === 0) {
+                            respond([]);
+                            interval && clearInterval(interval);
+                        }
+                    }
+
+                    const interval: number = setInterval(checkPageStylesNow, 200);
+                    checkPageStylesNow();
+                }
+            }
+        };
+    }
 }

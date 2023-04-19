@@ -1,8 +1,100 @@
-## Unreleased
+## 4.9.64 (TBD)
 
-- Fix CSS imports that contains `url(...)` and ends with `screen`.
-- Send network response to the correct frame in tab.
-- Handle more cases lowering `calc(...)` by using [Shunting Yard algorithm](https://en.wikipedia.org/wiki/Shunting_yard_algorithm).
+- Use passive event listeners (#11047)
+
+## 4.9.63 (Apr 10, 2023)
+
+- Site toggle panel (detect dark theme and shortcut).
+- App toggle panel (automation and shortcut).
+- Improved Site List indexing.
+
+## 4.9.62 (Jan 8, 2023)
+
+- Fixed a edge case with extracting color numbers, it's now able to extract `rgb(0 0 0/0.04)`. (#10565)
+- Improved IPv6 check. (#10564)
+- Faster UI loading. (#10589)
+
+## 4.9.61 (Jan 2, 2023)
+
+- Only invert PDFs on mail.google.com and drive.google.com, if the setting for PDF inversion has been enabled. (#10310)
+- Show in the new UI design when a page is disabled, because it's protected by the browser. (#10338)
+- Improved restoring Dark Reader elements, when the whole DOM is being overwritten. (#10372)
+
+## 4.9.60 (Oct 27, 2022)
+
+- Fixed broken hotkeys.
+- Improved IP v6 address support.
+
+## 4.9.59 (Oct 23, 2022)
+
+- Fixes a issue where `darkreader-fallback` wasn't removed from the DOM, when Dark Reader finds a `<meta name="darkreader-lock">` element.
+- Be stricter when the user specifies a last slash for a URL in the Site List.
+- Display a warning that "System" Automation might not work properly in Chromium on Linux and Kiwi on Android.
+- Workaround for Kiwi file download during settings import, fix opening Dark Reader DevTools.
+- A button to clear the Site List (v5 Preview UI).
+
+## 4.9.58 (Sep 22, 2022)
+
+- Remove newlines from CSS URL values, before handling them.
+- Better detection for text color property in variables.
+- es-419 (Latin America & Caribbean Spanish) translation.
+- Updates to Hebrew and Portuguese (Brazilian) translations.
+
+## 4.9.57 (Aug 23, 2022)
+
+- Fix iframes not getting modified when settings were changed.
+- Fixed registering system automation handlers multiple times.
+
+## 4.9.56 (Aug 16, 2022)
+
+- Fix browser theme not changing when automation + scheme behavior was enabled.
+
+## 4.9.55 (Aug 10, 2022)
+
+- Fix Google calendar.
+- Fix Opera/Vivaldi sidebar's getting modified.
+- Fix incorrect inline background colors when `mask` is explicitly disabled.
+- Fixed breaking for some old browser versions.
+
+## 4.9.54 (Aug 10, 2022)
+
+- Fixed System automation.
+
+## 4.9.53 (Aug 9, 2022)
+
+- Don't manage styles that have an empty `href` attribute.
+- Use `navigator.UserAgentData` when possible.
+- Add a `<meta name="darkreader-lock">` detector, to disable Dark Reader when detected (only dynamic theme).
+- Fix filter theme for Firefox v102+
+- Correctly open static theme editor on Mobile.
+- Migrate automation settings to its own object.
+- Correctly handle empty URL's in `background-image` property.
+- Make color parsing use cache.
+- Send updates only to affected tabs when toggling sites.
+- Fixed images with masks (Gmail icons issue).
+- Background page refactoring.
+
+## 4.9.52 (June 28, 2022)
+
+- Correctly handle escaped characters in CSS `url(...)` values.
+
+## 4.9.51 (May 27, 2022)
+
+Dynamic mode improvements:
+
+- Fixed CSS imports that contain `url(...)` and end with `screen`.
+- Send network responses to correct frames in tabs.
+- Improved `calc(...)` color handling by using [Shunting Yard algorithm](https://en.wikipedia.org/wiki/Shunting_yard_algorithm).
+
+New translations:
+
+- Malay translation.
+- Telugu translation.
+
+Other:
+
+- UI improvements.
+- Users' fixes for websites.
 
 ## 4.9.50 (May 1, 2022)
 

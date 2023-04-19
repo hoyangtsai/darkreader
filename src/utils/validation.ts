@@ -1,5 +1,6 @@
 import {DEFAULT_SETTINGS, DEFAULT_THEME} from '../defaults';
-import type {UserSettings, Theme, ThemePreset, CustomSiteConfig, TimeSettings, LocationSettings} from '../definitions';
+import type {UserSettings, Theme, ThemePreset, CustomSiteConfig, TimeSettings, LocationSettings, Automation} from '../definitions';
+import {AutomationMode} from './automation';
 
 function isBoolean(x: any): x is boolean {
     return typeof x === 'boolean';
@@ -46,22 +47,22 @@ function isOneOf(...values: any[]) {
     return (x: any) => values.includes(x);
 }
 
-function hasRequiredProperties<T>(obj: T, keys: Array<keyof T>) {
+function hasRequiredProperties<T extends Record<string, unknown>>(obj: T, keys: Array<keyof T>) {
     return keys.every((key) => obj.hasOwnProperty(key));
 }
 
 function createValidator() {
     const errors: string[] = [];
 
-    function validateProperty<T>(obj: T, key: keyof T, validator: (x: any) => boolean, fallback: T) {
+    function validateProperty<T extends Record<string, unknown>>(obj: T, key: keyof T, validator: (x: any) => boolean, fallback: T) {
         if (!obj.hasOwnProperty(key) || validator(obj[key])) {
             return;
         }
-        errors.push(`Unexpected value for "${key}": ${JSON.stringify(obj[key])}`);
+        errors.push(`Unexpected value for "${key as string}": ${JSON.stringify(obj[key])}`);
         obj[key] = fallback[key];
     }
 
-    function validateArray<T>(obj: T, key: keyof T, validator: (x: any) => boolean) {
+    function validateArray<T extends Record<string, unknown>, V>(obj: T, key: keyof T, validator: (x: V) => boolean) {
         if (!obj.hasOwnProperty(key)) {
             return;
         }
@@ -75,7 +76,7 @@ function createValidator() {
             }
         }
         if (wrongValues.size > 0) {
-            errors.push(`Array "${key}" has wrong values: ${Array.from(wrongValues).map((v) => JSON.stringify(v)).join('; ')}`);
+            errors.push(`Array "${key as string}" has wrong values: ${Array.from(wrongValues).map((v) => JSON.stringify(v)).join('; ')}`);
         }
     }
 
@@ -136,10 +137,19 @@ export function validateSettings(settings: Partial<UserSettings>) {
     validateProperty(settings, 'changeBrowserTheme', isBoolean, DEFAULT_SETTINGS);
     validateProperty(settings, 'syncSettings', isBoolean, DEFAULT_SETTINGS);
     validateProperty(settings, 'syncSitesFixes', isBoolean, DEFAULT_SETTINGS);
-    validateProperty(settings, 'automation', isOneOf('', 'time', 'system', 'location'), DEFAULT_SETTINGS);
-    validateProperty(settings, 'automationBehaviour', isOneOf('OnOff', 'Scheme'), DEFAULT_SETTINGS);
+    validateProperty(settings, 'automation', (automation: Automation) => {
+        if (!isPlainObject(automation)) {
+            return false;
+        }
 
-    validateProperty(settings, 'time', (time: TimeSettings) => {
+        const automationValidator = createValidator();
+        automationValidator.validateProperty(automation, 'enabled', isBoolean, automation);
+        automationValidator.validateProperty(automation, 'mode', isOneOf(AutomationMode.SYSTEM, AutomationMode.TIME, AutomationMode.LOCATION, AutomationMode.NONE), automation);
+        automationValidator.validateProperty(automation, 'behavior', isOneOf('OnOff', 'Scheme'), automation);
+        return automationValidator.errors.length === 0;
+    }, DEFAULT_SETTINGS);
+
+    validateProperty(settings, AutomationMode.TIME, (time: TimeSettings) => {
         if (!isPlainObject(time)) {
             return false;
         }
@@ -149,7 +159,7 @@ export function validateSettings(settings: Partial<UserSettings>) {
         return timeValidator.errors.length === 0;
     }, DEFAULT_SETTINGS);
 
-    validateProperty(settings, 'location', (location: LocationSettings) => {
+    validateProperty(settings, AutomationMode.LOCATION, (location: LocationSettings) => {
         if (!isPlainObject(location)) {
             return false;
         }
@@ -169,7 +179,7 @@ export function validateSettings(settings: Partial<UserSettings>) {
     return {errors, settings};
 }
 
-export function validateTheme(theme: Partial<Theme>) {
+export function validateTheme(theme: Partial<Theme> | null | undefined) {
     if (!isPlainObject(theme)) {
         return {errors: ['Theme is not a plain object'], theme: DEFAULT_THEME};
     }

@@ -3,10 +3,13 @@ const config = {overrides: []};
 
 // Source code (TS, JSX, JS)
 config.overrides.push({
-    files: ['{src,tasks,tests}/**/*.{ts,tsx,js,jsx}', '.*.js', 'index.d.ts'],
+    files: ['{src,tasks,tests}/**/*.{ts,tsx,js,cjs,mjs,jsx}', '.*.js', 'index.d.ts'],
     excludedFiles: ['darkreader.js'],
     parser: '@typescript-eslint/parser',
     plugins: ['@typescript-eslint', 'local'],
+    parserOptions: {
+        sourceType: 'module',
+    },
     extends: ['plugin:@typescript-eslint/recommended', 'plugin:import/recommended', 'plugin:import/typescript'],
     rules: {
         'array-bracket-spacing': ['error', 'never'],
@@ -73,8 +76,10 @@ config.overrides.push({
         '@typescript-eslint/member-delimiter-style': 'error',
         '@typescript-eslint/no-duplicate-imports': 'error',
         '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-non-null-assertion': 'off',
         '@typescript-eslint/no-redeclare': 'error',
         '@typescript-eslint/no-object-literal-type-assertion': 'off',
+        '@typescript-eslint/no-unused-vars': 'error',
         '@typescript-eslint/no-use-before-define': 'off',
         '@typescript-eslint/semi': ['error', 'always'],
         '@typescript-eslint/quotes': ['error', 'single', {
@@ -179,11 +184,12 @@ config.overrides.push({
     extends: ['plugin:compat/recommended'],
     parserOptions: {
         ecmaVersion: 2019,
-        sourceType: 'module'
+        sourceType: 'module',
     },
     settings: {
         polyfills: [
             'navigator.deviceMemory',
+            'navigator.userAgentData',
         ],
     },
     overrides: [

@@ -9,7 +9,7 @@ import DetectDarkThemeGroup from './detect-dark-theme';
 import ChangeBrowserTheme from './change-browser-theme';
 import ContextMenusGroup from './context-menus';
 import Version from './version';
-import { isFirefox, isSafari } from '../../../utils/platform';
+import {isFirefox, isSafari} from '../../../utils/platform';
 
 type SettingsPageProps = ViewProps & {
     onAutomationNavClick: () => void;
@@ -23,7 +23,7 @@ export default function SettingsPage(props: SettingsPageProps) {
             <EnabledByDefaultGroup {...props} />
             {isFirefox ? <ChangeBrowserTheme {...props} /> : null}
             <SiteListButton onClick={props.onSiteListNavClick} />
-            {isSafari ? null : <DevToolsGroup {...props} />}
+            {isSafari ? null : <DevToolsGroup />}
             <AutomationButton onClick={props.onAutomationNavClick} />
             <ContextMenusGroup {...props} />
             <ManageSettingsButton onClick={props.onManageSettingsClick} />
