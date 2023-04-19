@@ -41,18 +41,6 @@ type TestMessage = {
 // Start extension
 const extension = Extension.start();
 
-chrome.runtime.onInstalled.addListener(({reason}) => {
-    if (reason === 'install' && !isSafari) {
-        chrome.tabs.create({url: getHelpURL()});
-    }
-});
-
-chrome.runtime.setUninstallURL(UNINSTALL_URL);
-if (chrome.commands) {
-    // Firefox Android does not support chrome.commands
-    chrome.commands.onCommand.addListener(async (command) => extension.onCommand(command));
-}
-
 const welcome = `  /''''\\
  (0)==(0)
 /__||||__\\
@@ -140,7 +128,7 @@ if (__WATCH__) {
     listen();
 } else if (!__DEBUG__ && !__TEST__) {
     chrome.runtime.onInstalled.addListener(({reason}) => {
-        if (reason === 'install') {
+        if (reason === 'install' && !isSafari) {
             chrome.tabs.create({url: getHelpURL()});
         }
     });

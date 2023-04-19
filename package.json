@@ -6,7 +6,7 @@
     "api": "node --max-old-space-size=3072 tasks/cli.js build --api",
     "build": "node --max-old-space-size=3072 tasks/cli.js build --release",
     "build:all": "node --max-old-space-size=3072 tasks/cli.js build --debug --release --api",
-    "build:safari": "npm run build && xcrun safari-web-extension-converter ./build/release/chrome --project-location ./build/release/safari",
+    "build:safari": "npm run build && xcrun safari-web-extension-converter ./build/release/chrome-mv3 --project-location ./build/release/safari",
     "code-style": "eslint --ignore-pattern '!.eslintplugin.js' --cache --fix -- 'src/**/*.ts' 'src/**/*.tsx' 'tasks/**/*.js' 'tests/[!coverage]**/*.js' 'tests/**/*.ts' '.eslintrc.js' 'index.d.ts' '.eslintplugin.js'",
     "debug": "node --max-old-space-size=3072 tasks/cli.js build --debug",
     "debug:watch": "node --max-old-space-size=3072 tasks/cli.js build --debug --watch",
